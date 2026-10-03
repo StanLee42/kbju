@@ -39,10 +39,44 @@
 расписания (недельная сетка и вращающийся цикл), исключений на даты и хранилища.
 
 Дальше — второй этап: фото тарелки через DeepSeek, карточка результата, слой инструментов
-и журнал расхода токенов.
+и журнал расхода токенов. Он уже описан как предложение OpenSpec:
+[`openspec/changes/stage-2-photo-analysis/`](openspec/changes/stage-2-photo-analysis).
+Первый этап оформлен как завершённое изменение:
+[`openspec/changes/archive/2026-10-03-stage-1-diary-skeleton/`](openspec/changes/archive/2026-10-03-stage-1-diary-skeleton).
 
-План: [`.misc/PLAN_KBJU_PWA.md`](.misc/PLAN_KBJU_PWA.md) и
-[`.misc/PLAN_ASSISTANT.md`](.misc/PLAN_ASSISTANT.md).
+## Разработка по спецификациям
+
+Проект ведётся по OpenSpec: сначала спецификация, потом код. Источник истины о поведении —
+`openspec/specs/`, где каждое требование записано сценариями WHEN/THEN. Предложения о будущих
+изменениях лежат в `openspec/changes/`, завершённые переезжают в `openspec/changes/archive/`
+с датой в имени.
+
+| Каталог | Роль |
+|---|---|
+| `openspec/specs/` | как приложение должно вести себя **сейчас** |
+| `openspec/changes/` | что предлагается сделать, ещё не сделано |
+| `openspec/changes/archive/` | история завершённых изменений |
+| `.misc/` | планы, решения и разборы «почему так» — это не контракт поведения |
+
+Команды:
+
+```
+openspec list                      # предложения и их прогресс
+openspec list --specs              # возможности и число требований в каждой
+openspec show <имя>                # показать предложение или спецификацию
+openspec validate --all --strict   # проверить формат спек и предложений
+openspec archive <имя> -y          # перенести требования в specs/ и убрать в архив
+openspec view                      # интерактивная панель
+```
+
+В ZCode добавлены команды и навыки OpenSpec (каталог `.zcode/`): `/opsx:explore`,
+`/opsx:propose`, `/opsx:apply`, `/opsx:sync`, `/opsx:archive`. Расширенный набор включается
+через `openspec config profile` и затем `openspec update`.
+
+Порядок работы: `/opsx:propose` описывает изменение и его дельта-спеки → задачи в `tasks.md`
+отмечаются по ходу реализации → `/opsx:archive` переносит требования в `openspec/specs/`.
+Артефакты пишутся по-русски, структурные заголовки и ключевые слова SHALL/MUST остаются
+английскими (задано в `openspec/config.yaml`).
 
 ## Разработка
 
@@ -76,7 +110,9 @@ node tools/cdp-flow.mjs                                     # запись ед�
 
 ## Документация
 
-Всё планирование, заметки и хендоверы — в каталоге `.misc/`.
-
-- [`.misc/PLAN_KBJU_PWA.md`](.misc/PLAN_KBJU_PWA.md) — основной план: дневник, фото, голос, тренды, этапы.
-- [`.misc/PLAN_ASSISTANT.md`](.misc/PLAN_ASSISTANT.md) — ассистент: чат, память, инструменты, правила тона.
+- Поведение приложения: [`openspec/specs/`](openspec/specs) — требования со сценариями
+- Что делаем дальше: [`openspec/changes/stage-2-photo-analysis/`](openspec/changes/stage-2-photo-analysis)
+- История завершённого: [`openspec/changes/archive/`](openspec/changes/archive)
+- Планы и разборы «почему так»: [`.misc/PLAN_KBJU_PWA.md`](.misc/PLAN_KBJU_PWA.md) — дневник,
+  фото, голос, тренды, этапы; [`.misc/PLAN_ASSISTANT.md`](.misc/PLAN_ASSISTANT.md) — ассистент,
+  память, правила тона
