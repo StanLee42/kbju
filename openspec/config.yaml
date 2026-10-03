@@ -1,0 +1,40 @@
+schema: spec-driven
+
+context: |
+  Language: Russian
+  All artifacts must be written in Russian.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+rules:
+  specs:
+    - "Нормативный текст пишется по-русски: «Система ДОЛЖНА … (SHALL)» и «Система ОБЯЗАНА … (MUST)». Ключевое слово в скобках ставится один раз на предложение; отрицания — «НЕ ДОЛЖНА … (MUST NOT)» или «(SHALL NOT)» по исходному уровню. По-английски остаются только структурные заголовки и WHEN/THEN."
+    - "Имена сценариев не переименовывать. MODIFIED заменяет требование целиком, а потеря сценария отклоняется при архивации."
+    - "Требования описывают поведение, а не реализацию — без имён файлов, функций и библиотек."
+  proposal:
+    - "Явно перечислять, что в изменение не входит."
+  design:
+    - "Записывать решения вместе с альтернативами и причиной выбора."
+  tasks:
+    - "Задачи формулировать как конкретные действия, без «разобраться» и «продумать»."
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
