@@ -52,11 +52,17 @@ export function resolveDayTypeId(dateISO, settings) {
   return schedule.week?.[key] || fallback;
 }
 
-export function emptyTotals() {
-  return { kcal: 0, protein: 0, fat: 0, carbs: 0 };
+/** Тип дня строго по расписанию, без учёта ручных исключений. */
+export function scheduledDayTypeId(dateISO, settings) {
+  const withoutOverrides = settings?.dateOverrides
+    ? { ...settings, dateOverrides: {} }
+    : settings;
+  return resolveDayTypeId(dateISO, withoutOverrides);
 }
 
-export function sumEntries(entries) {
+export function emptyTotals() {
+  return { kcal: 0, protein: 0, fat: 0, carbs: 0 };
+}export function sumEntries(entries) {
   const totals = emptyTotals();
   for (const entry of entries || []) {
     totals.kcal += Number(entry.kcal) || 0;

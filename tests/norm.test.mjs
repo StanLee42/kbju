@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  DEFAULT_SETTINGS, dayTypeById, remaining, resolveDayTypeId, sumEntries,
+  DEFAULT_SETTINGS, dayTypeById, remaining, resolveDayTypeId, scheduledDayTypeId, sumEntries,
 } from '../js/norm.js';
 
 const settings = structuredClone(DEFAULT_SETTINGS);
@@ -46,6 +46,16 @@ test('битая настройка не ломает разрешение ти�
   const broken = { ...settings, dateOverrides: { '2026-10-07': 'не существует' } };
   assert.equal(resolveDayTypeId('2026-10-07', broken), 'train');
   assert.equal(dayTypeById(settings, 'нет такого').id, 'rest');
+});
+
+test('расписание без исключений считается отдельно от ручного выбора', () => {
+  // 2026-10-07 — среда, по расписанию тренировка.
+  const withOverride = { ...settings, dateOverrides: { '2026-10-07': 'rest' } };
+  assert.equal(resolveDayTypeId('2026-10-07', withOverride), 'rest');
+  assert.equal(scheduledDayTypeId('2026-10-07', withOverride), 'train');
+  // Совпадает с расписанием — значит ручное исключение не нужно.
+  assert.equal(scheduledDayTypeId('2026-10-07', withOverride), 'train');
+  assert.equal(scheduledDayTypeId('2026-10-05', withOverride), 'rest');
 });
 
 test('суммы и остаток считаются по всем записям', () => {

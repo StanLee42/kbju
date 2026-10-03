@@ -1,7 +1,7 @@
 // Состояние приложения: настройки и записи выбранного дня.
 // Простейший стор с подписками — экранов мало, полный перерисовки достаточно.
 import * as db from './db.js';
-import { DEFAULT_SETTINGS, dayTypeById, resolveDayTypeId, sumEntries } from './norm.js';
+import { DEFAULT_SETTINGS, dayTypeById, resolveDayTypeId, scheduledDayTypeId, sumEntries } from './norm.js';
 import { todayISO, uid } from './util.js';
 
 const listeners = new Set();
@@ -129,10 +129,12 @@ export async function deleteEntry(id) {
   emit();
 }
 
-/** Ручное переключение типа дня: та же карта, что и исключения на даты. */
+/** Ручное переключение типа дня: та же карта, что и исключения на даты.
+ *  Если выбран тип, который и так назначен расписанием, исключение убирается —
+ *  иначе в настройках копились бы записи, ничего не меняющие. */
 export async function setDayTypeOverride(date, typeId) {
   const overrides = { ...(store.settings.dateOverrides || {}) };
-  if (typeId) overrides[date] = typeId;
+  if (typeId && typeId !== scheduledDayTypeId(date, store.settings)) overrides[date] = typeId;
   else delete overrides[date];
   await saveSettings({ dateOverrides: overrides });
 }
