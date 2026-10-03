@@ -4,8 +4,9 @@
 
 ### Requirement: Создание записи из фотографии
 
-The system SHALL let the user attach a photo of food, SHALL show the recognized items with their
-nutrition values for confirmation, and SHALL create a diary entry only after the user confirms.
+Система SHALL позволять пользователю прикрепить фотографию еды, SHALL показывать распознанные
+позиции с их КБЖУ на подтверждение и SHALL создавать запись в дневнике только после
+подтверждения пользователем.
 
 #### Scenario: Распознавание тарелки
 
@@ -25,8 +26,9 @@ nutrition values for confirmation, and SHALL create a diary entry only after the
 
 ### Requirement: Правка результата распознавания
 
-The system SHALL allow correcting any number and any item name in the result card before saving,
-and SHALL let the user adjust the portion with a single tap and enter an exact weight if known.
+Система SHALL позволять исправить любое число и любое название позиции в карточке результата
+до сохранения, SHALL давать изменить размер порции одним касанием и ввести точный вес, если
+он известен.
 
 #### Scenario: Правка числа
 
@@ -46,8 +48,8 @@ and SHALL let the user adjust the portion with a single tap and enter an exact w
 
 ### Requirement: Видимая расшифровка распознанного
 
-The system SHALL show what the model recognized in words, next to the numbers, so the user can
-judge where the values came from.
+Система SHALL показывать словами то, что распознала модель, рядом с числами, чтобы
+пользователь видел, откуда взялись значения.
 
 #### Scenario: Показ расшифровки
 

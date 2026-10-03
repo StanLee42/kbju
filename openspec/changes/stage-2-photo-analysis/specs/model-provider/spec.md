@@ -9,8 +9,8 @@
 
 ### Requirement: Подключение ключа провайдера
 
-The system SHALL let the user enter an API key in settings, SHALL store it on the device, and
-SHALL NOT include it in exports or backups.
+Система SHALL позволять пользователю ввести ключ провайдера в настройках, SHALL хранить его
+на устройстве и SHALL NOT включать его в выгрузки и резервные копии.
 
 #### Scenario: Ключ сохранён
 
@@ -24,8 +24,8 @@ SHALL NOT include it in exports or backups.
 
 ### Requirement: Строгий формат ответа модели
 
-The system MUST validate the model response against a fixed schema of nutritional items and MUST
-retry once when the response is not valid JSON.
+Система MUST проверять ответ модели по фиксированной схеме позиций с КБЖУ и MUST делать одну
+повторную попытку, если ответ не является корректным JSON.
 
 #### Scenario: Валидный ответ
 
@@ -40,8 +40,8 @@ retry once when the response is not valid JSON.
 
 ### Requirement: Переключение провайдера без правок кода
 
-The system SHALL keep providers behind a common interface so that the analysis provider can be
-changed in settings without changing application code.
+Система SHALL держать провайдеров за общим интерфейсом, чтобы провайдера анализа можно было
+сменить в настройках без правок в коде приложения.
 
 #### Scenario: Смена провайдера
 
@@ -50,8 +50,8 @@ changed in settings without changing application code.
 
 ### Requirement: Понятные ошибки вместо сломанного интерфейса
 
-The system SHALL translate provider failures into human-readable messages and SHALL NOT lose the
-user's photo or text when a request fails.
+Система SHALL переводить ошибки провайдера в понятные человеку сообщения и SHALL NOT терять
+фотографию и текст пользователя, если запрос не удался.
 
 #### Scenario: Исчерпан баланс
 

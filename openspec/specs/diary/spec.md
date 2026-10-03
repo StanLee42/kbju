@@ -1,6 +1,7 @@
 # diary Specification
 
 ## Purpose
+
 Записи о еде за день: что съедено, когда, в каком размере порции и с каким КБЖУ.
 Всё хранится только на устройстве.
 
@@ -8,8 +9,9 @@
 
 ### Requirement: Запись еды вручную
 
-The system SHALL allow the user to create a diary entry with a name, time, optional weight in
-grams, portion size, calories, protein, fat, carbohydrates and an optional comment.
+Система SHALL позволять пользователю создать запись дневника с названием, временем,
+необязательным весом в граммах, размером порции, калориями, белками, жирами, углеводами
+и необязательным комментарием.
 
 #### Scenario: Создание записи
 
@@ -28,9 +30,9 @@ grams, portion size, calories, protein, fat, carbohydrates and an optional comme
 
 ### Requirement: Множитель размера порции
 
-The system SHALL scale the entered nutrition values by the selected portion size using ×0.7 for
-small, ×1 for medium and ×1.4 for large, and SHALL store the base values separately so that
-repeated saving does not apply the multiplier twice.
+Система SHALL умножать введённые значения КБЖУ на выбранный размер порции: ×0,7 для маленькой,
+×1 для средней и ×1,4 для большой, и SHALL хранить базовые значения отдельно, чтобы повторное
+сохранение не применяло множитель дважды.
 
 #### Scenario: Маленькая порция уменьшает значения
 
@@ -45,7 +47,7 @@ repeated saving does not apply the multiplier twice.
 
 ### Requirement: Правка и удаление записи
 
-The system SHALL allow editing and deleting any entry of the day without leaving the day screen.
+Система SHALL позволять править и удалять любую запись дня, не покидая экран дня.
 
 #### Scenario: Правка отражается в дне
 
@@ -61,8 +63,8 @@ The system SHALL allow editing and deleting any entry of the day without leaving
 
 ### Requirement: Локальное хранение записей
 
-The system MUST store all diary entries on the device and MUST NOT send them anywhere except
-when the user explicitly requests analysis by a model.
+Система MUST хранить все записи дневника на устройстве и MUST NOT отправлять их куда-либо,
+кроме случая, когда пользователь сам запросил анализ моделью.
 
 #### Scenario: Записи переживают перезагрузку
 

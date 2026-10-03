@@ -9,8 +9,8 @@
 
 ### Requirement: Журнал расхода по каждому запросу
 
-The system SHALL record one usage row per model request with the request kind, token counts
-including cache hits, the number of web searches and the computed cost.
+Система SHALL записывать одну строку расхода на каждый запрос к модели: вид запроса, количество
+токенов с учётом попаданий в кэш, число поисков в сети и вычисленную стоимость.
 
 #### Scenario: Запись после запроса
 
@@ -24,8 +24,8 @@ including cache hits, the number of web searches and the computed cost.
 
 ### Requirement: Стоимость считается по редактируемой таблице цен
 
-The system SHALL compute cost from a price table that stores the price and the date it refers to,
-and SHALL label computed amounts as an estimate rather than a fact.
+Система SHALL считать стоимость по таблице цен, которая хранит цену и дату, к которой она
+относится, и SHALL помечать посчитанные суммы как оценку, а не как факт.
 
 #### Scenario: Пиковые и непиковые часы
 
@@ -39,8 +39,8 @@ and SHALL label computed amounts as an estimate rather than a fact.
 
 ### Requirement: Прогноз стоимости при разном уровне общения
 
-The system SHALL project the monthly cost from the user's own average request cost for several
-usage levels.
+Система SHALL прогнозировать стоимость месяца по фактической средней стоимости запросов
+пользователя для нескольких уровней использования.
 
 #### Scenario: Калькулятор месяца
 
@@ -49,7 +49,8 @@ usage levels.
 
 ### Requirement: Бюджет и предупреждения
 
-The system SHALL let the user set a monthly budget and SHALL warn as spending approaches it.
+Система SHALL позволять задать бюджет на месяц и SHALL предупреждать по мере приближения
+расхода к нему.
 
 #### Scenario: Предупреждение о бюджете
 
@@ -63,8 +64,8 @@ The system SHALL let the user set a monthly budget and SHALL warn as spending ap
 
 ### Requirement: Остаток на счету провайдера
 
-The system SHALL show the remaining provider balance and SHALL make clear that local speech
-recognition costs nothing.
+Система SHALL показывать остаток на счету провайдера и SHALL явно сообщать, что локальное
+распознавание речи не расходует средства.
 
 #### Scenario: Просмотр баланса
 

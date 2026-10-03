@@ -4,10 +4,9 @@
 
 ### Requirement: Выбор типа дня на текущую дату
 
-The system SHALL let the user switch the day type with a single tap and SHALL apply the
-corresponding norm immediately. A manual choice MUST be stored as an exception for that date,
-and choosing the type the schedule already assigns MUST remove the exception instead of
-creating a redundant one.
+Система SHALL позволять переключить тип дня одним касанием и SHALL сразу применять
+соответствующую норму. Ручной выбор MUST сохраняться как исключение на эту дату, а выбор типа,
+который расписание и так назначает, MUST убирать исключение, а не создавать лишнее.
 
 #### Scenario: Переключение типа дня
 

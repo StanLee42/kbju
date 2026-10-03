@@ -1,6 +1,7 @@
 # schedule Specification
 
 ## Purpose
+
 Нормы КБЖУ привязаны к типам дней, а тип дня подставляется по календарю: по дням недели
 или по вращающемуся циклу, с возможностью исключения на конкретную дату.
 
@@ -8,8 +9,8 @@
 
 ### Requirement: Типы дней с нормами
 
-The system SHALL keep user-editable day types, each with its own calorie, protein, fat and
-carbohydrate norm, and SHALL use the norms of the resolved day type for the day screen.
+Система SHALL хранить редактируемые пользователем типы дней, у каждого свои нормы калорий,
+белков, жиров и углеводов, и SHALL использовать нормы определённого типа дня на экране дня.
 
 #### Scenario: Правка нормы типа дня
 
@@ -28,8 +29,8 @@ carbohydrate norm, and SHALL use the norms of the resolved day type for the day 
 
 ### Requirement: Расписание по дням недели
 
-The system SHALL support a weekly schedule that assigns a day type to each weekday, and SHALL
-derive the type of a date from it when no exception is set.
+Система SHALL поддерживать недельное расписание, назначающее тип дня каждому дню недели,
+и SHALL определять тип даты по нему, когда исключения нет.
 
 #### Scenario: Подстановка по дню недели
 
@@ -39,9 +40,9 @@ derive the type of a date from it when no exception is set.
 
 ### Requirement: Расписание по вращающемуся циклу
 
-The system SHALL support a rotating cycle with configurable cycle length, training positions and
-a start date, and SHALL resolve dates before the start date by the same formula without negative
-offsets.
+Система SHALL поддерживать вращающийся цикл с настраиваемой длиной, позициями тренировок
+и датой старта, и SHALL определять даты раньше старта той же формулой, без отрицательных
+смещений.
 
 #### Scenario: Цикл два через два
 
@@ -66,8 +67,8 @@ offsets.
 
 ### Requirement: Исключения на отдельные даты
 
-The system SHALL allow overriding the day type for a specific date, and the override MUST take
-precedence over the schedule.
+Система SHALL позволять задавать исключение на тип дня для конкретной даты, и исключение
+MUST иметь приоритет над расписанием.
 
 #### Scenario: Исключение сильнее расписания
 

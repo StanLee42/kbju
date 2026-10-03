@@ -1,6 +1,7 @@
 # app-shell Specification
 
 ## Purpose
+
 Оболочка отвечает за то, чтобы приложение жило на телефоне как обычная иконка, открывалось
 без сети и не теряло дневник.
 
@@ -8,8 +9,8 @@
 
 ### Requirement: Установка на домашний экран
 
-The system SHALL be installable as a standalone app from the browser and SHALL provide icons of
-192 and 512 pixels so that the installed icon is not scaled up from a smaller image.
+Система SHALL устанавливаться из браузера как отдельное приложение и SHALL предоставлять
+иконки 192 и 512 пикселей, чтобы установленная иконка не растягивалась из меньшего изображения.
 
 #### Scenario: Установка по HTTPS
 
@@ -26,8 +27,8 @@ The system SHALL be installable as a standalone app from the browser and SHALL p
 
 ### Requirement: Работа без сети
 
-The system SHALL cache its own files so the app opens without network access, and MUST NOT cache
-user data or responses of external services in that cache.
+Система SHALL кэшировать собственные файлы, чтобы приложение открывалось без доступа к сети,
+и MUST NOT класть в этот кэш пользовательские данные и ответы внешних сервисов.
 
 #### Scenario: Открытие без сети
 
@@ -41,8 +42,8 @@ user data or responses of external services in that cache.
 
 ### Requirement: Сохранность данных
 
-The system SHALL request persistent storage from the browser and SHALL show how much space is
-used, and SHALL provide a full local reset behind an explicit confirmation.
+Система SHALL запрашивать у браузера постоянное хранилище, SHALL показывать занятое место
+и SHALL давать полный сброс локальных данных за явным подтверждением.
 
 #### Scenario: Запрос постоянного хранилища
 
@@ -61,8 +62,8 @@ used, and SHALL provide a full local reset behind an explicit confirmation.
 
 ### Requirement: Диагностика ошибки запуска
 
-The system SHALL show a readable error message on screen instead of an empty page when the app
-fails to start, because the device has no developer console.
+Система SHALL показывать читаемый текст ошибки на экране вместо пустой страницы, если
+приложение не запустилось: на телефоне консоли разработчика нет.
 
 #### Scenario: Ошибка в скрипте
 

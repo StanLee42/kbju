@@ -9,9 +9,8 @@
 
 ### Requirement: Кольца прогресса дня
 
-The system SHALL show calories as a ring with the eaten amount and the remaining amount, and
-SHALL show protein, fat and carbohydrates as three smaller rings, marking overrun distinctly
-from the incomplete state.
+Система SHALL показывать калории кольцом со съеденным количеством и остатком, а белки, жиры
+и углеводы — тремя меньшими кольцами, и SHALL отличать перебор от недобора визуально.
 
 #### Scenario: Остаток до нормы
 
@@ -31,8 +30,8 @@ from the incomplete state.
 
 ### Requirement: Полоски по каждому показателю
 
-The system SHALL show a progress bar for calories, protein, fat and carbohydrates with the eaten
-amount, the norm and the remaining amount, and SHALL mark overrun in red.
+Система SHALL показывать полоску прогресса по калориям, белкам, жирам и углеводам
+со съеденным количеством, нормой и остатком, и SHALL помечать перебор красным.
 
 #### Scenario: Полоска с остатком
 
@@ -47,8 +46,8 @@ amount, the norm and the remaining amount, and SHALL mark overrun in red.
 
 ### Requirement: Лента дня и итог
 
-The system SHALL list the day's entries in chronological order with time, name, portion and
-macros, and SHALL show the totals for the day below the list.
+Система SHALL перечислять записи дня в хронологическом порядке со временем, названием,
+порцией и БЖУ, и SHALL показывать итог дня под списком.
 
 #### Scenario: Порядок записей
 
@@ -68,8 +67,8 @@ macros, and SHALL show the totals for the day below the list.
 
 ### Requirement: Выбор типа дня на текущую дату
 
-The system SHALL let the user switch the day type with a single tap and SHALL apply the
-corresponding norm immediately and persist the choice for that date.
+Система SHALL позволять переключить тип дня одним касанием, SHALL сразу применять
+соответствующую норму и SHALL сохранять выбор для этой даты.
 
 #### Scenario: Переключение типа дня
 
