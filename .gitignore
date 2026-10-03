@@ -14,3 +14,8 @@
 npm-debug.log*
 tmp/
 .tmp/
+
+# Ключи и локальные настройки
+.env
+.env.*
+*.key

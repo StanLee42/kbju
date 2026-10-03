@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1720">
+<meta name="color-scheme" content="dark light">
+<title>КБЖУ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<main id="view" class="view"></main>
+
+<nav class="tabbar" id="tabbar">
+  <a class="tab" href="#/today" data-tab="today">
+    <span class="tab-icon" aria-hidden="true">◍</span>
+    <span class="tab-label">Сегодня</span>
+  </a>
+  <button class="tab tab-add" id="addButton" type="button">
+    <span class="tab-plus" aria-hidden="true">+</span>
+    <span class="tab-label">Записать</span>
+  </button>
+  <a class="tab" href="#/settings" data-tab="settings">
+    <span class="tab-icon" aria-hidden="true">⚙</span>
+    <span class="tab-label">Настройки</span>
+  </a>
+</nav>
+
+<div class="sheet-root" id="sheetRoot" hidden></div>
+
+<script>
+  // Диагностика: на телефоне консоли нет, поэтому любую ошибку показываем
+  // текстом прямо на экране вместо пустой страницы.
+  (function () {
+    function show(title, detail) {
+      var view = document.getElementById('view');
+      if (!view || view.dataset.errorShown) return;
+      view.dataset.errorShown = '1';
+      var card = document.createElement('section');
+      card.className = 'card';
+      var heading = document.createElement('h2');
+      heading.className = 'card-title';
+      heading.textContent = title;
+      var text = document.createElement('pre');
+      text.className = 'tiny faint';
+      text.style.whiteSpace = 'pre-wrap';
+      text.textContent = detail;
+      card.append(heading, text);
+      view.replaceChildren(card);
+    }
+
+    window.addEventListener('error', function (event) {
+      if (event.target && event.target.tagName === 'SCRIPT') {
+        show('Не загрузился файл приложения', event.target.src || '');
+        return;
+      }
+      show('Ошибка в приложении', (event.message || '') + '\n' + (event.filename || '') + ':' + (event.lineno || ''));
+    }, true);
+
+    window.addEventListener('unhandledrejection', function (event) {
+      var reason = event.reason;
+      show('Ошибка в приложении', (reason && (reason.stack || reason.message)) || String(reason));
+    });
+  })();
+</script>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
