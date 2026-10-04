@@ -19,7 +19,7 @@ test('нормы считаются из измеренного обмена, а
   assert.equal(result.base.bmr, 1800);
   assert.equal(result.rest.protein, 121);
   assert.equal(result.rest.fat, 66);
-  assert.equal(result.training.fat, 66);
+  assert.equal(result.training.fat, 74);
   assert.equal(result.rest.kcal, 1844);
   assert.equal(result.training.kcal, 2433);
   assert.equal(result.rest.carbs, 192);

@@ -64,13 +64,13 @@ test('история считает изменение веса по измер�
     today: '2026-10-07',
     entriesByDate: {},
     measurements: [
-      { date: '2026-09-15', weight: 82 },
-      { date: '2026-10-05', weight: 92.2 },
-      { date: '2026-10-07', weight: 91.9 },
+      { date: '2026-09-15', weight: 84 },
+      { date: '2026-10-05', weight: 83.2 },
+      { date: '2026-10-07', weight: 82.9 },
     ],
   });
-  assert.equal(history.weight.first, 93);
-  assert.equal(history.weight.last, 91.9);
+  assert.equal(history.weight.first, 84);
+  assert.equal(history.weight.last, 82.9);
   assert.equal(history.weight.change, -1.1);
 });
 
