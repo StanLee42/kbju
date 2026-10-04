@@ -6,6 +6,7 @@ import { createDeepSeek } from './deepseek.js';
 import { KINDS, describeError, normalizeThrown, providerError } from './errors.js';
 import { parseAnalysis, parseImpedance } from './parse.js';
 import {
+  CHAT_SYSTEM_PROMPT, CHAT_USER_PROMPT,
   IMPEDANCE_SYSTEM_PROMPT, IMPEDANCE_USER_PROMPT,
   MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS_RETRY,
   SYSTEM_PROMPT, USER_PROMPT,
@@ -89,6 +90,28 @@ async function runWithRetry({ provider, system, user, image, text, parse }) {
 export async function analyzeFood({ provider, image = null, text = null }) {
   return runWithRetry({
     provider, system: SYSTEM_PROMPT, user: USER_PROMPT, image, text, parse: parseAnalysis,
+  });
+}
+
+/**
+ * Разбор сообщения в разговоре про еду: словами, снимком или тем и другим.
+ *
+ * `draft` — разбор, полученный раньше в этом же разговоре. Он уходит модели отдельным
+ * блоком, чтобы уточнение («это половина») изменило тот же разбор, а не завело второй.
+ */
+export async function analyzeChat({ provider, text = null, image = null, draft = null }) {
+  const message = draft
+    ? `Текущий разбор этой еды (JSON):\n${JSON.stringify(draft)}\n\n`
+      + `Уточнение человека: ${text || '(только снимок, без слов)'}`
+    : (text || '(только снимок, без слов)');
+
+  return runWithRetry({
+    provider,
+    system: CHAT_SYSTEM_PROMPT,
+    user: CHAT_USER_PROMPT,
+    image,
+    text: message,
+    parse: parseAnalysis,
   });
 }
 

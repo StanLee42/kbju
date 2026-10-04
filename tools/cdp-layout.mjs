@@ -211,10 +211,12 @@ if (!parsed.секций) problems.push('на экране настроек не
 // Проверяем, что касания доходят до содержимого, а не гасятся невидимым слоем.
 await send('Page.navigate', { url: `${baseUrl}/#/today` });
 await wait(2000);
-console.log(`\n${await tapCenter('Фото', 'кнопка Фото')}`);
+console.log(`\n${await tapCenter('Добавить еду', 'кнопка добавления')}`);
 const sheetOpened = await evaluate(`Boolean(document.querySelector('.sheet'))`);
-if (!sheetOpened) problems.push('касание по «Фото» не открыло карточку добавления');
-console.log(`карточка добавления открылась: ${sheetOpened}`);
+if (!sheetOpened) problems.push('касание по «Добавить еду» не открыло окно добавления');
+const composerReady = await evaluate(`Boolean(document.querySelector('.composer-input') && document.querySelector('.composer-send'))`);
+if (!composerReady) problems.push('в окне добавления нет поля ввода и кнопки отправки');
+console.log(`окно добавления открылось: ${sheetOpened}, поле ввода на месте: ${composerReady}`);
 
 const blockers = await evaluate(`(() => {
   const points = [[60, 120], [180, 300], [300, 700]];

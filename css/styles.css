@@ -328,6 +328,39 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ---------- Разговор про еду ---------- */
+
+/* Переписка ограничена по высоте, чтобы поле ввода всегда оставалось на виду. */
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.msg { border-radius: var(--radius-sm); padding: 10px 12px; max-width: 92%; }
+.msg-user { align-self: flex-end; background: var(--bg-elev-2); border: 1px solid var(--line); }
+.msg-assistant { align-self: stretch; padding: 0; }
+.msg-text { white-space: pre-wrap; }
+
+.msg-photo {
+  width: 100%;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  max-height: 200px;
+  object-fit: cover;
+}
+
+/* Приложенный снимок показываем маленьким: он не должен занимать весь экран. */
+.attached { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.attached .msg-photo { width: 64px; height: 64px; margin: 0; }
+
+.composer-input { min-height: 52px; resize: vertical; }
+.composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.composer-send { width: auto; padding: 12px 18px; }
+
 /* ---------- Нижнее меню ---------- */
 
 .tabbar {

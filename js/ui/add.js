@@ -2,7 +2,7 @@
 // применяется к введённым числам, а базовые значения хранятся отдельно,
 // чтобы при правке ничего не умножалось дважды.
 import { addEntry, deleteEntry, store, updateEntry } from '../state.js';
-import { h, num, nowTime, round } from '../util.js';
+import { h, nowTime, num, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
 
 const PORTIONS = [

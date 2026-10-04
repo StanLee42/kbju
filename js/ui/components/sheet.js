@@ -1,5 +1,5 @@
 // Нижняя шторка: используется для добавления, правки записи и диалогов.
-import { h } from '../../util.js';
+import { fill, h } from '../../util.js';
 
 const root = () => document.getElementById('sheetRoot');
 
@@ -15,7 +15,7 @@ export function openSheet({ title = '', content, actions = [], onClose } = {}) {
 
   const backdrop = h('div', { class: 'sheet-backdrop', onclick: () => close() });
 
-  holder.replaceChildren(backdrop, sheet);
+  fill(holder, backdrop, sheet);
   holder.hidden = false;
   document.body.style.overflow = 'hidden';
 
@@ -29,7 +29,7 @@ export function openSheet({ title = '', content, actions = [], onClose } = {}) {
     closed = true;
     document.removeEventListener('keydown', onKey);
     holder.hidden = true;
-    holder.replaceChildren();
+    fill(holder);
     document.body.style.overflow = '';
     if (onClose) onClose();
   }

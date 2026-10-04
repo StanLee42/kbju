@@ -2,9 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { KINDS, analyzeFood, readImpedance } from '../js/llm/index.js';
+import { KINDS, analyzeChat, analyzeFood, readImpedance } from '../js/llm/index.js';
 import { providerError } from '../js/llm/errors.js';
 import { extractJson, parseAnalysis, parseImpedance } from '../js/llm/parse.js';
+import { CHAT_SYSTEM_PROMPT, SYSTEM_PROMPT } from '../js/llm/prompt.js';
 
 const validAnswer = JSON.stringify({
   dish: 'Паста с сыром',
@@ -163,4 +164,54 @@ test('разбор отчёта ходит через тот же слой с п
   assert.equal(result.ok, true);
   assert.equal(result.data.bmr, 1800);
   assert.equal(provider.calls[0].maxTokens > 0, true);
+});
+
+test('сообщение словами уходит одной строкой без снимка', async () => {
+  const provider = stubProvider([{ text: validAnswer }]);
+  const result = await analyzeChat({ provider, text: 'тарелка борща и два куска хлеба' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.items.length, 2);
+  assert.equal(provider.calls[0].image, null, 'снимка может не быть');
+  assert.equal(provider.calls[0].text, 'тарелка борща и два куска хлеба');
+  assert.equal(provider.calls[0].system, CHAT_SYSTEM_PROMPT);
+});
+
+test('уточнение уходит вместе с текущим разбором', async () => {
+  const draft = {
+    dish: 'Борщ', basis: 'per_portion',
+    items: [{ name: 'Борщ', grams: 300, kcal: 120, protein: 5, fat: 6, carbs: 10 }],
+  };
+  const provider = stubProvider([{ text: validAnswer }]);
+  await analyzeChat({ provider, text: 'это половина', draft });
+
+  const message = provider.calls[0].text;
+  assert.ok(message.includes('Текущий разбор'), 'разбор должен быть передан модели');
+  assert.ok(message.includes('Борщ'), 'в переданном разборе видны прежние позиции');
+  assert.ok(message.includes('это половина'), 'и новое сообщение человека');
+  // Снимок при уточнении не обязателен: слова человека здесь главные.
+  assert.equal(provider.calls[0].image, null);
+});
+
+test('уточнение со снимком отправляет и снимок, и слова', async () => {
+  const provider = stubProvider([{ text: validAnswer }]);
+  await analyzeChat({
+    provider,
+    text: 'соуса не было',
+    image: { base64: 'AAA', mime: 'image/jpeg' },
+    draft: { dish: 'Паста', items: [] },
+  });
+
+  assert.deepEqual(provider.calls[0].image, { base64: 'AAA', mime: 'image/jpeg' });
+  assert.ok(provider.calls[0].text.includes('соуса не было'));
+});
+
+test('чат-промпт ставит слова человека выше снимка и запрещает начинать заново', () => {
+  assert.notEqual(CHAT_SYSTEM_PROMPT, SYSTEM_PROMPT);
+  assert.match(CHAT_SYSTEM_PROMPT, /слова человека важнее снимка/i);
+  assert.match(CHAT_SYSTEM_PROMPT, /Верни ИЗМЕНЁННЫЙ разбор целиком/);
+  assert.match(CHAT_SYSTEM_PROMPT, /Не начинай заново/);
+  // Схема ответа общая со снимком: разбирает её тот же код.
+  assert.match(CHAT_SYSTEM_PROMPT, /"basis"/);
+  assert.match(SYSTEM_PROMPT, /"basis"/);
 });

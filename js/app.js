@@ -3,7 +3,7 @@
 import { isStoragePersistent, requestPersistentStorage } from './db.js';
 import { store, init } from './state.js';
 import { h } from './util.js';
-import { openAddSheet } from './ui/add.js';
+import { openChatSheet } from './ui/chat.js';
 import * as settings from './ui/settings.js';
 import * as today from './ui/today.js';
 import * as usage from './ui/usage.js';
@@ -39,7 +39,7 @@ async function main() {
 
   document.getElementById('addButton').addEventListener('click', () => {
     if (currentPath() !== '/today') location.hash = '#/today';
-    openAddSheet();
+    openChatSheet();
   });
 
   window.addEventListener('hashchange', render);
