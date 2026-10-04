@@ -11,6 +11,34 @@ const LIBRARY = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0';
 let transcriber = null;
 let loadedConfigId = null;
 
+/**
+ * Складывает прогресс по всем файлам: библиотека сообщает о каждом отдельно.
+ *
+ * Размер файла, о котором уже отчитались, нельзя терять на сообщении «готово»:
+ * иначе общий вес на глазах уменьшается, а полоска загрузки едет назад.
+ */
+function createProgressTracker() {
+  const perFile = new Map();
+  return (info) => {
+    if (!info || !info.file) return null;
+    if (info.status === 'progress') {
+      perFile.set(info.file, { loaded: info.loaded || 0, total: info.total || 0 });
+    } else if (info.status === 'done') {
+      const known = perFile.get(info.file);
+      if (known) perFile.set(info.file, { loaded: known.total, total: known.total });
+    } else {
+      return null;
+    }
+    let loaded = 0;
+    let total = 0;
+    for (const item of perFile.values()) {
+      loaded += item.loaded || 0;
+      total += item.total || 0;
+    }
+    return { loaded, total, percent: total ? Math.round((loaded / total) * 100) : 0 };
+  };
+}
+
 async function getLibrary() {
   const module = await import(/* @vite-ignore */ LIBRARY);
   module.env.allowLocalModels = false;
@@ -27,32 +55,16 @@ self.addEventListener('message', async (event) => {
       const { pipeline } = await getLibrary();
 
       // Прогресс складываем по всем файлам: библиотека сообщает о каждом отдельно.
-      const perFile = new Map();
-      const report = () => {
-        let loaded = 0;
-        let total = 0;
-        for (const item of perFile.values()) {
-          loaded += item.loaded || 0;
-          total += item.total || 0;
-        }
-        self.postMessage({
-          type: 'progress',
-          payload: { loaded, total, percent: total ? Math.round((loaded / total) * 100) : 0 },
-        });
+      const track = createProgressTracker();
+      const report = (info) => {
+        const progress = track(info);
+        if (progress) self.postMessage({ type: 'progress', payload: progress });
       };
 
       transcriber = await pipeline('automatic-speech-recognition', config.model, {
         device: config.device,
         dtype: config.dtype,
-        progress_callback: (info) => {
-          if (!info || !info.file) return;
-          if (info.status === 'progress') {
-            perFile.set(info.file, { loaded: info.loaded || 0, total: info.total || 0 });
-            report();
-          } else if (info.status === 'done') {
-            perFile.set(info.file, { loaded: 1, total: 1 });
-          }
-        },
+        progress_callback: report,
       });
 
       loadedConfigId = config.id;
