@@ -3,7 +3,7 @@
 import { createProvider, describeError } from '../llm/index.js';
 import { saveSettings, store } from '../state.js';
 import { DEFAULT_PRICES, USAGE_KINDS, allUsage, budgetState, projectMonth, summarize } from '../usage.js';
-import { fill, h, round } from '../util.js';
+import { h, round } from '../util.js';
 import { toast } from './components/sheet.js';
 
 const PERIODS = [
@@ -63,7 +63,7 @@ export function mount(container) {
   const money = (value) => `$${(Number(value) || 0).toFixed(value >= 1 ? 2 : 4)}`;
 
   function renderPeriods() {
-    fill(periodRow, ...PERIODS.map((item) => h('button', {
+    periodRow.replaceChildren(...PERIODS.map((item) => h('button', {
       type: 'button', text: item.label,
       'aria-pressed': String(item.id === period),
       onclick: () => {
@@ -75,13 +75,13 @@ export function mount(container) {
 
   function renderSummary(filtered) {
     if (!filtered.requests) {
-      fill(summaryCard, 
+      summaryCard.replaceChildren(
         h('h2', { class: 'card-title', text: 'Итого' }),
         h('p', { class: 'small muted' }, 'За этот период запросов к модели не было.'));
       return;
     }
     const tokens = filtered.tokens;
-    fill(summaryCard, 
+    summaryCard.replaceChildren(
       h('h2', { class: 'card-title', text: 'Итого' }),
       h('div', { style: 'font-size:26px;font-weight:700' }, money(filtered.total)),
       h('p', { class: 'small muted', style: 'margin-top:6px' },
@@ -94,11 +94,11 @@ export function mount(container) {
   function renderKinds(filtered) {
     const entries = Object.entries(filtered.byKind).sort((a, b) => b[1] - a[1]);
     if (!entries.length) {
-      fill(kindsCard, h('h2', { class: 'card-title', text: 'На что ушло' }));
+      kindsCard.replaceChildren(h('h2', { class: 'card-title', text: 'На что ушло' }));
       return;
     }
     const max = entries[0][1] || 1;
-    fill(kindsCard, 
+    kindsCard.replaceChildren(
       h('h2', { class: 'card-title', text: 'На что ушло' }),
       ...entries.map(([kind, cost]) => h('div', { class: 'bar-line' },
         h('div', { class: 'bar-head' },
@@ -115,14 +115,14 @@ export function mount(container) {
     const chatRows = rows.filter((row) => row.kind === 'chat');
     const source = chatRows.length ? summarize(chatRows) : filtered;
     if (!source.requests) {
-      fill(calculatorCard, 
+      calculatorCard.replaceChildren(
         h('h2', { class: 'card-title', text: 'Сколько будет стоить' }),
         h('p', { class: 'small muted' },
           'Пока не набралось истории: как только появятся запросы к модели, здесь будет прогноз.'));
       return;
     }
     const projection = projectMonth({ averageCost: source.averagePerRequest, levels: LEVELS });
-    fill(calculatorCard, 
+    calculatorCard.replaceChildren(
       h('h2', { class: 'card-title', text: 'Сколько будет стоить' }),
       h('p', { class: 'tiny faint', style: 'margin-bottom:10px' },
         chatRows.length
@@ -154,7 +154,7 @@ export function mount(container) {
       none: '',
     }[state.level];
 
-    fill(budgetCard, 
+    budgetCard.replaceChildren(
       h('h2', { class: 'card-title', text: 'Бюджет на месяц' }),
       h('label', { class: 'field' },
         h('span', { class: 'field-label', text: 'Сколько готовы тратить в месяц, долларов' }),
@@ -222,7 +222,7 @@ export function mount(container) {
     parts.push(h('p', { class: 'tiny faint', style: 'margin-top:10px' },
       'Распознавание речи работает на устройстве и ничего не стоит — деньги тратят только '
       + 'запросы к модели.'));
-    fill(balanceCard, ...parts);
+    balanceCard.replaceChildren(...parts);
   }
 
   function renderPrices() {

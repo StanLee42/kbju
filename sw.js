@@ -16,15 +16,6 @@ const SHELL = [
   './icons/icon-512.png',
 ];
 
-// Отдельный кэш для библиотеки распознавания с CDN. Он не привязан к версии сборки
-// намеренно: иначе после каждого обновления приложения телефон качал бы её заново.
-const LIBRARY_CACHE = 'kbju-library-v1';
-const LIBRARY_HOSTS = ['cdn.jsdelivr.net'];
-
-// Кэши, которые переживают обновление сборки. Кэш моделей ведёт сама библиотека
-// распознавания: удалив его, мы заставили бы телефон скачивать модель заново.
-const KEPT_CACHES = [LIBRARY_CACHE, 'transformers-cache'];
-
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
@@ -36,9 +27,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys
-        .filter((key) => key !== VERSION && !KEPT_CACHES.includes(key))
-        .map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -53,24 +42,7 @@ self.addEventListener('fetch', (event) => {
   if (request.cache === 'no-store' || request.cache === 'reload') return;
 
   const url = new URL(request.url);
-
-  // Библиотека распознавания приезжает с CDN. Её кэшируем отдельно: без сети приложение
-  // должно не только открыться, но и распознать сказанное. Модели сюда не попадают —
-  // их библиотека хранит сама, вторым кэшем.
-  if (LIBRARY_HOSTS.includes(url.hostname)) {
-    event.respondWith(
-      caches.open(LIBRARY_CACHE).then((cache) => cache.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (response.ok) cache.put(request, response.clone());
-          return response;
-        });
-      }))
-    );
-    return;
-  }
-
-  // Остальные внешние адреса (модели, провайдер) не трогаем: у них свои правила.
+  // Запросы к моделям и любые внешние адреса не трогаем.
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(

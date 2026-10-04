@@ -1,13 +1,14 @@
 // Экран «Сегодня»: кольца, полоски, лента записей, переключатель типа дня.
 import { MACROS, byTimeAscending, dayTypeById, remaining, resolveDayTypeId } from '../norm.js';
 import { store, setDayTypeOverride, subscribe } from '../state.js';
-import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull } from '../util.js';
+import {
+  formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull,
+} from '../util.js';
 import { createBar } from './components/bar.js';
 import { createRing } from './components/ring.js';
 import { openAddSheet } from './add.js';
-import { openPhotoSheet } from './addphoto.js';
-import { openEntryDetails } from './result-card.js';
-import { openVoiceSheet } from './voice.js';
+import { openPhotoEntrySheet, openPhotoSheet } from './addphoto.js';
+import { toast } from './components/sheet.js';
 
 const PORTION_LABEL = { small: 'маленькая порция', normal: '', large: 'большая порция' };
 
@@ -17,8 +18,8 @@ export function mount(container) {
   const source = h('div', { class: 'tiny faint', style: 'margin-top:2px' });
   const switchRow = h('div', { class: 'chips', style: 'margin-top:10px' });
 
-  // Два основных способа ввода: снимок и голос. Оба приводят к одной карточке разбора,
-  // а запись появляется в дневнике только по подтверждению.
+  // Два основных способа ввода. Голос появится на третьем этапе, поэтому кнопка
+  // на месте, но честно сообщает, что ещё не работает.
   const actionsRow = h('div', { class: 'chips', style: 'margin-top:12px' },
     h('button', {
       class: 'btn btn-primary', type: 'button', style: 'flex:1',
@@ -26,7 +27,7 @@ export function mount(container) {
     }),
     h('button', {
       class: 'btn', type: 'button', style: 'flex:1', text: '🎤 Голос',
-      onclick: () => openVoiceSheet({ date: store.date }),
+      onclick: () => toast('Голосовой ввод появится на третьем этапе'),
     }));
 
   const kcalRing = createRing({ size: 154, stroke: 13, color: 'var(--kcal)' });
@@ -61,7 +62,7 @@ export function mount(container) {
   function renderSwitch() {
     const { settings, date } = store;
     const activeId = resolveDayTypeId(date, settings);
-    fill(switchRow, ...(settings.dayTypes || []).map((type) => h('button', {
+    switchRow.replaceChildren(...(settings.dayTypes || []).map((type) => h('button', {
       type: 'button',
       text: type.name,
       'aria-pressed': String(type.id === activeId),
@@ -72,19 +73,19 @@ export function mount(container) {
   function renderFeed() {
     const entries = byTimeAscending(store.entries);
     if (!entries.length) {
-      fill(feed, h('div', { class: 'empty' },
+      feed.replaceChildren(h('div', { class: 'empty' },
         'Пока пусто. Нажмите «Записать», чтобы добавить еду.'));
       totalLine.textContent = '';
       return;
     }
 
-    fill(feed, ...entries.map((entry) => {
+    feed.replaceChildren(...entries.map((entry) => {
       const portion = PORTION_LABEL[entry.portion] || '';
       const sub = [entry.grams ? `${round(entry.grams)} г` : '', portion, entry.portionNote]
         .filter(Boolean).join(' · ');
-      // Разбор из фото или голоса открывается карточкой с позициями, ручные — формой правки.
-      const open = () => (['photo', 'voice'].includes(entry.source) && entry.items?.length
-        ? openEntryDetails(entry)
+      // Записи из фотографии открываются со снимком и позициями, ручные — формой правки.
+      const open = () => (entry.source === 'photo' && entry.items?.length
+        ? openPhotoEntrySheet(entry)
         : openAddSheet({ entry }));
       return h('div', { class: 'entry', onclick: open },
         h('div', { class: 'entry-time', text: formatTime(entry.time) }),
@@ -147,7 +148,7 @@ export function mount(container) {
 
     if (store.entries.length) {
       const entriesWord = plural(store.entries.length, 'запись', 'записи', 'записей');
-      fill(totalLine, 
+      totalLine.replaceChildren(
         h('span', { class: 'muted', text: `Итого за день · ${store.entries.length} ${entriesWord}` }),
         h('span', {},
           h('b', { text: `${round(totals.kcal)} ккал` }),

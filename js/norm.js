@@ -10,9 +10,6 @@ export const DEFAULT_SETTINGS = {
   // null означает «использовать таблицу цен по умолчанию» из js/usage.js.
   prices: null,
   budget: { monthly: 0 },
-  // Распознавание речи. Пустая строка — «выбрать по возможностям устройства»:
-  // с работающей видеокартой сборку с ускорением, без неё — надёжную без ускорения.
-  voice: { config: '' },
   dayTypes: [
     { id: 'rest', name: 'Обычный день', kcal: 2000, protein: 130, fat: 65, carbs: 200 },
     { id: 'train', name: 'Тренировка', kcal: 2400, protein: 150, fat: 70, carbs: 260 },

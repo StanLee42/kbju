@@ -1,13 +1,12 @@
 // Настройки: типы дней, расписание, исключения на даты, цель и темп, хранилище.
 import { isStoragePersistent, requestPersistentStorage, usageEstimate, wipeEverything } from '../db.js';
 import * as db from '../db.js';
-import { availableConfigs, configById, detectAcceleration, pickDefaultConfig } from '../audio/recognize.js';
 import { AVAILABLE_PROVIDERS, createProvider, describeError, readImpedance } from '../llm/index.js';
 import { pickImage, prepareForApi } from '../media/image.js';
 import { normsFromMeasurement, dayTypeById, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
-import { bytesHuman, fill, h, num, todayISO } from '../util.js';
+import { bytesHuman, h, num, todayISO } from '../util.js';
 import { toast } from './components/sheet.js';
 
 const WEEK_KEYS = [
@@ -27,7 +26,6 @@ const MACRO_FIELDS = [
 
 export function mount(container) {
   const providerHost = h('div', {});
-  const voiceHost = h('div', {});
   const reportHost = h('div', {});
   const pricesHost = h('div', {});
   const dayTypesHost = h('div', {});
@@ -42,9 +40,6 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Провайдер анализа' }),
       providerHost),
-    h('section', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'Распознавание речи' }),
-      voiceHost),
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Нормы из отчёта' }),
       reportHost),
@@ -74,10 +69,8 @@ export function mount(container) {
   // --- версия сборки ---
 
   /**
-   * Показывает, какая сборка лежит на сервере. Файл версии читаем в обход кэша,
-   * иначе service worker отдал бы старую строку и смысл проверки потерялся бы.
-   * Это именно серверная сборка: та, что работает сейчас, подхватывается сама,
-   * а если приложение было открыто всё время — кнопкой ниже.
+   * Показывает, какая сборка сейчас работает. Файл версии читаем в обход кэша,
+   * иначе service worker отдаст старую строку и смысл проверки потеряется.
    */
   function buildVersionLine() {
     const line = h('p', { class: 'tiny faint center' },
@@ -115,9 +108,6 @@ export function mount(container) {
             })}`;
           }
         }
-        // Строка показывает сборку на сервере, а не ту, что сейчас работает: файл версии
-        // читается в обход кэша. Это разные вещи ровно в одном случае — когда приложение
-        // открыто с прошлого раза и ещё не подхватило новую сборку; тогда помогает кнопка ниже.
         line.textContent = `версия на сервере: ${version}${when}`;
       })
       .catch(() => {
@@ -164,8 +154,8 @@ export function mount(container) {
       value: id, text: id === 'deepseek' ? 'DeepSeek' : id, selected: (provider.id || 'deepseek') === id,
     })));
 
-    // Пустые места собираем списком: заполнение контейнера отсеивает null само,
-    // но так виднее, что именно попадает на экран, а что пропущено.
+    // Внимание: replaceChildren превращает null в текстовый узел «null»,
+    // поэтому пустые элементы отсеиваем заранее.
     const nodes = [];
 
     if (AVAILABLE_PROVIDERS.length > 1) {
@@ -200,7 +190,7 @@ export function mount(container) {
       'Ключ хранится только на устройстве: он не попадает ни в выгрузку дневника, '
       + 'ни в публикацию приложения. Проверка ключа бесплатна — она спрашивает только баланс.'));
 
-    fill(providerHost, ...nodes);
+    providerHost.replaceChildren(...nodes);
   }
 
   async function checkKey() {
@@ -224,67 +214,6 @@ export function mount(container) {
       renderProvider();
     }
   }
-
-  // --- распознавание речи ---
-
-  let voiceAcceleration = null;
-  let voiceCheckFailed = false;
-
-  function renderVoice() {
-    const chosen = store.settings.voice?.config || '';
-    const offered = voiceAcceleration ? availableConfigs(voiceAcceleration) : [];
-    const chosenConfig = chosen ? configById(chosen) : null;
-    const chosenOffered = Boolean(chosenConfig) && offered.some((item) => item.id === chosen);
-    const effective = chosenOffered ? chosenConfig : (voiceAcceleration ? pickDefaultConfig(voiceAcceleration) : null);
-
-    const nodes = [];
-
-    if (!voiceAcceleration) {
-      nodes.push(h('p', { class: 'small muted' }, voiceCheckFailed
-        ? 'Не удалось проверить, умеет ли телефон считать на видеокарте. Считаем, что не умеет.'
-        : 'Проверяем, умеет ли телефон считать на видеокарте…'));
-    } else {
-      nodes.push(h('p', { class: 'small muted' }, voiceAcceleration.webgpu
-        ? `Толкать расчёт на видеокарту можно${voiceAcceleration.adapter ? ` (${voiceAcceleration.adapter})` : ''}: такие сборки считают в разы быстрее.`
-        : `Видеокарту для расчёта телефон не даёт — ${voiceAcceleration.reason}. Сборки с ускорением здесь не предлагаются.`));
-    }
-
-    if (voiceAcceleration) {
-      const choices = [
-        { id: '', label: 'Автоматически', note: `по возможностям устройства — сейчас это «${effective?.label || 'средняя'}»` },
-        ...offered,
-      ];
-      nodes.push(h('div', { class: 'choice' }, choices.map((option) => h('button', {
-        class: 'btn', type: 'button',
-        'aria-pressed': String((option.id || '') === (chosenOffered ? chosen : '')),
-        onclick: async () => {
-          await saveSettings({ voice: { ...store.settings.voice, config: option.id } });
-          renderVoice();
-        },
-      },
-      h('div', { style: 'font-weight:600' }, option.label),
-      h('div', { class: 'tiny faint', style: 'margin-top:2px' }, option.note)))));
-    }
-
-    if (chosenConfig && !chosenOffered) {
-      nodes.push(h('p', { class: 'small', style: 'margin-top:10px;color:var(--over)' },
-        `Выбранная сборка «${chosenConfig.label}» на этом устройстве не заработает: `
-        + 'распознавание возьмёт автоматическую.'));
-    }
-
-    nodes.push(h('p', { class: 'tiny faint', style: 'margin-top:12px' },
-      'Речь распознаётся на телефоне, наружу уходит только текст. Вес указан измеренный: '
-      + 'столько скачает телефон при первом распознавании. Дальше модель остаётся в памяти, '
-      + 'и повторная загрузка занимает меньше секунды.'));
-
-    fill(voiceHost, ...nodes);
-  }
-
-  // Проверка ускорения — асинхронная: пока она идёт, раздел показывает «проверяем…».
-  detectAcceleration()
-    .then((result) => { voiceAcceleration = result; })
-    .catch(() => { voiceCheckFailed = true; })
-    .finally(renderVoice);
 
   // --- нормы из отчёта биоимпеданса ---
 
@@ -416,7 +345,7 @@ export function mount(container) {
       }
     }
 
-    fill(reportHost, ...parts);
+    reportHost.replaceChildren(...parts);
   }
 
   async function pickReport() {
@@ -515,7 +444,7 @@ export function mount(container) {
         onchange: (event) => patch(key, Number(event.target.value) || 0),
       }));
 
-    fill(pricesHost, 
+    pricesHost.replaceChildren(
       h('div', { class: 'grid-2' },
         field('inputCacheMiss', 'Вход, промах'),
         field('inputCacheHit', 'Вход, кэш')),
@@ -546,7 +475,7 @@ export function mount(container) {
 
   function renderDayTypes() {
     const types = store.settings.dayTypes || [];
-    fill(dayTypesHost, ...types.map((type, index) => h('div', {
+    dayTypesHost.replaceChildren(...types.map((type, index) => h('div', {
       style: 'padding:10px 0;border-bottom:1px solid var(--line)',
     },
     h('input', {
@@ -576,7 +505,7 @@ export function mount(container) {
     const { schedule } = store.settings;
     const isCycle = schedule.mode === 'cycle';
 
-    fill(scheduleModeRow, ...[
+    scheduleModeRow.replaceChildren(...[
       ['week', 'По дням недели'],
       ['cycle', 'По циклу'],
     ].map(([mode, label]) => h('button', {
@@ -592,7 +521,7 @@ export function mount(container) {
     cycleHost.hidden = !isCycle;
 
     if (!isCycle) {
-      fill(weekHost, ...WEEK_KEYS.map(([key, label]) => h('label', {
+      weekHost.replaceChildren(...WEEK_KEYS.map(([key, label]) => h('label', {
         class: 'row-between', style: 'padding:7px 0',
       },
       h('span', { class: 'small', text: label }),
@@ -609,7 +538,7 @@ export function mount(container) {
       const { length = 2, trainPositions = [], startDate } = schedule.cycle || {};
       const positions = Array.from({ length }, (_, i) => i + 1);
 
-      fill(cycleHost, 
+      cycleHost.replaceChildren(
         h('label', { class: 'field' },
           h('span', { class: 'field-label', text: 'Длина цикла, дней' }),
           h('input', {
@@ -674,7 +603,7 @@ export function mount(container) {
       value: type.id, text: type.name,
     })));
 
-    fill(exceptionsHost, 
+    exceptionsHost.replaceChildren(
       dates.length
         ? h('div', {}, dates.map((date) => h('div', {
           class: 'row-between', style: 'padding:7px 0;border-bottom:1px solid var(--line)',
@@ -751,7 +680,7 @@ export function mount(container) {
     });
     parts.push(h('div', { class: 'chips', style: 'margin-top:10px' }, wipeButton));
 
-    fill(storageHost, ...parts);
+    storageHost.replaceChildren(...parts);
   }
 
   // --- цель и темп ---
@@ -790,7 +719,6 @@ export function mount(container) {
 
   renderDynamic();
   renderProvider();
-  renderVoice();
   renderReport();
   renderPrices();
   renderStorage();

@@ -2,11 +2,14 @@
 // сохранить запись. Запись создаётся только по подтверждению — модель ничего не пишет сама.
 import { createProvider, analyzeFood, describeError } from '../llm/index.js';
 import { pickImage, prepareForApi, makeThumbnail } from '../media/image.js';
-import { addEntry, saveThumb, store } from '../state.js';
+import { PORTION_PRESETS, portionFactor, portionNote, scaleItems, sumItems } from '../portion.js';
+import { addEntry, loadThumb, saveThumb, store } from '../state.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
-import { fill, h, nowTime, round } from '../util.js';
+import { h, num, nowTime, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
-import { createResultCard } from './result-card.js';
+
+const SOURCE_LABEL = { label: 'по таблице с упаковки', estimate: 'оценка по снимку' };
+const CONFIDENCE_LABEL = { high: 'уверенно', medium: 'примерно', low: 'неуверенно' };
 
 export function openPhotoSheet({ date = null, entry = null } = {}) {
   const settings = store.settings || {};
@@ -20,7 +23,9 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
     error: null,
     busy: false,
     comment: '',
-    card: null,
+    portion: 'all',
+    customGrams: null,
+    items: [],
   };
 
   const host = h('div', {});
@@ -28,10 +33,22 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
 
   const keyMissing = !providerConfig.key;
 
+  function scaleFactor() {
+    return portionFactor({
+      portion: state.portion,
+      customGrams: state.customGrams,
+      items: state.items,
+    });
+  }
+
+  function scaledTotals() {
+    return sumItems(scaleItems(state.items, scaleFactor()));
+  }
+
   // --- шаг 1: выбор снимка ---
 
   function renderChooser() {
-    fill(host, 
+    host.replaceChildren(
       h('p', { class: 'small muted' },
         'Снимите тарелку или упаковку. Лучше всего работает таблица пищевой ценности на упаковке: '
         + 'с неё значения берутся точно. По тарелке модель оценивает состав и вес на глаз.'),
@@ -110,43 +127,139 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
     }
 
     state.analysis = { ...result.data, cost };
-    // Новый разбор — новая карточка: старая осталась бы от прошлого снимка.
-    state.card = null;
+    state.items = result.data.items.map((item) => ({ ...item }));
+    if (result.data.basis === 'per_100g') {
+      // Вес порции модель не знала — предлагаем уточнить его сразу.
+      state.portion = 'all';
+    }
     render();
   }
 
   // --- карточка результата ---
 
-  function renderCard() {
-    // Разбор фотографии показываем той же карточкой, что и сказанное вслух: правки
-    // в ней живут в одном месте, а запись в дневник получается одинаковой.
-    if (!state.card) {
-      state.card = createResultCard({
-        analysis: state.analysis,
-        items: state.analysis.items,
-        origin: 'photo',
-        head: state.preview
-          ? h('img', {
-            src: `data:${state.preview.mime};base64,${state.preview.base64}`,
-            alt: 'снимок',
-            style: 'width:100%;border-radius:12px;margin-bottom:12px;max-height:240px;object-fit:cover',
-          })
-          : null,
-        retryLabel: 'Переснять',
-        onRetry: () => {
-          state.file = null;
-          state.preview = null;
-          state.analysis = null;
-          state.card = null;
-          render();
+  function itemRow(item, index) {
+    const field = (key, label, width) => h('label', { class: 'field', style: 'margin:0' },
+      h('span', { class: 'field-label', text: label }),
+      h('input', {
+        type: key === 'name' ? 'text' : 'number',
+        inputmode: key === 'name' ? undefined : 'decimal',
+        value: item[key],
+        style: width ? `width:${width}` : '',
+        oninput: (event) => {
+          item[key] = key === 'name' ? event.target.value : num(event.target.value);
+          updateTotals();
         },
-        onSave: save,
-      });
-    }
-    fill(host, state.card.element);
+      }));
+
+    return h('div', { style: 'padding:10px 0;border-bottom:1px solid var(--line)' },
+      field('name', 'Позиция'),
+      h('div', { class: 'grid-4', style: 'margin-top:8px' },
+        field('grams', 'Граммы'),
+        field('kcal', 'Ккал'),
+        field('protein', 'Б'),
+        field('fat', 'Ж')),
+      h('div', { class: 'grid-4', style: 'margin-top:8px' },
+        field('carbs', 'У'),
+        h('div', {}),
+        h('div', {}),
+        h('button', {
+          class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать',
+          onclick: () => {
+            state.items.splice(index, 1);
+            render();
+          },
+        })));
   }
 
-  async function save({ items, totals, portionNote: note }) {
+  const totalsNode = h('div', { class: 'small', style: 'margin-top:12px' });
+
+  function updateTotals() {
+    const totals = scaledTotals();
+    const factor = scaleFactor();
+    totalsNode.replaceChildren(
+      h('div', {},
+        h('b', { text: `${round(totals.kcal)} ккал` }),
+        ` · Б ${round(totals.protein)} · Ж ${round(totals.fat)} · У ${round(totals.carbs)}`),
+      h('div', { class: 'tiny faint', style: 'margin-top:4px' },
+        `Вес порции ${round(totals.grams)} г`
+        + (factor === 1 ? '' : ` (множитель ×${round(factor, 2)})`)));
+  }
+
+  function renderCard() {
+    const analysis = state.analysis;
+    const portionRow = h('div', { class: 'portion-row' },
+      [...PORTION_PRESETS, { id: 'custom', label: 'Свои граммы' }].map((choice) => h('button', {
+        type: 'button',
+        text: choice.label,
+        'aria-pressed': String(state.portion === choice.id),
+        onclick: () => {
+          state.portion = choice.id;
+          render();
+        },
+      })));
+
+    const customInput = state.portion === 'custom'
+      ? h('label', { class: 'field', style: 'margin-top:10px' },
+        h('span', { class: 'field-label', text: 'Сколько съедено, граммов' }),
+        h('input', {
+          type: 'number', inputmode: 'decimal', value: state.customGrams ?? '',
+          oninput: (event) => {
+            state.customGrams = event.target.value;
+            updateTotals();
+          },
+        }))
+      : null;
+
+    host.replaceChildren(
+      state.preview
+        ? h('img', {
+          src: `data:${state.preview.mime};base64,${state.preview.base64}`,
+          alt: 'снимок',
+          style: 'width:100%;border-radius:12px;margin-bottom:12px;max-height:240px;object-fit:cover',
+        })
+        : null,
+      h('div', { class: 'small' },
+        h('b', { text: analysis.dish }),
+        h('div', { class: 'tiny faint', style: 'margin-top:2px' },
+          `${SOURCE_LABEL[analysis.source] || analysis.source}`
+          + ` · ${CONFIDENCE_LABEL[analysis.confidence] || analysis.confidence}`
+          + (analysis.source === 'label' ? ' · значения взяты из таблицы на упаковке' : ''))),
+      h('h3', { class: 'card-title', style: 'margin-top:14px' }, 'Сколько съедено'),
+      portionRow,
+      customInput,
+      h('h3', { class: 'card-title', style: 'margin-top:16px' }, 'Позиции — можно править'),
+      h('div', {}, state.items.map((item, index) => itemRow(item, index))),
+      totalsNode,
+      analysis.assumptions
+        ? h('p', { class: 'tiny faint', style: 'margin-top:10px' }, `Что учтено: ${analysis.assumptions}`)
+        : null,
+      h('div', { class: 'chips', style: 'margin-top:16px' },
+        h('button', { class: 'btn-primary', type: 'button', text: 'Сохранить в дневник', onclick: save }),
+        h('button', {
+          class: 'btn btn-small', type: 'button', text: 'Переснять',
+          onclick: () => {
+            state.file = null;
+            state.preview = null;
+            state.analysis = null;
+            state.items = [];
+            render();
+          },
+        })),
+      h('p', { class: 'tiny faint', style: 'margin-top:8px' },
+        `Стоимость этого разбора: ${(analysis.cost || 0).toFixed(5)} $ (оценка)`));
+
+    updateTotals();
+  }
+
+  async function save() {
+    if (!state.items.length) {
+      toast('Нет ни одной позиции');
+      return;
+    }
+    const factor = scaleFactor();
+    const items = scaleItems(state.items, factor);
+    const totals = sumItems(items);
+
     let thumbId = null;
     try {
       if (state.file) {
@@ -156,6 +269,8 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
     } catch {
       // Без превью запись всё равно сохраняем: картинка не важнее данных.
     }
+
+    const note = portionNote({ portion: state.portion, factor, grams: totals.grams });
 
     await addEntry({
       date: targetDate,
@@ -184,7 +299,7 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
   // --- предпросмотр перед отправкой ---
 
   function renderPreview() {
-    fill(host, 
+    host.replaceChildren(
       h('img', {
         src: `data:${state.preview.mime};base64,${state.preview.base64}`,
         alt: 'снимок',
@@ -218,7 +333,7 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
   }
 
   function renderError() {
-    fill(host, 
+    host.replaceChildren(
       h('div', { class: 'card', style: 'border-color:var(--over)' },
         h('h3', { class: 'card-title', style: 'color:var(--over)' }, state.error.title || 'Не получилось'),
         h('p', { class: 'small muted' }, state.error.hint || ''),
@@ -249,4 +364,41 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
 
   render();
   return sheet;
+}
+
+/** Открывает карточку существующей записи из фотографии: превью и позиции. */
+export async function openPhotoEntrySheet(entry) {
+  const thumb = entry.thumbId ? await loadThumb(entry.thumbId).catch(() => null) : null;
+  const items = entry.items || [];
+  const url = thumb ? URL.createObjectURL(thumb) : null;
+  const content = h('div', {},
+    url
+      ? h('img', {
+        src: url,
+        alt: 'снимок',
+        style: 'width:100%;border-radius:12px;margin-bottom:12px;max-height:240px;object-fit:cover',
+      })
+      : null,
+    items.length
+      ? h('div', {}, items.map((item) => h('div', {
+        style: 'padding:8px 0;border-bottom:1px solid var(--line)',
+      },
+      h('div', { class: 'small' }, `${item.name} — ${round(item.grams)} г`),
+      h('div', { class: 'tiny faint' },
+        `${round(item.kcal)} ккал · Б ${round(item.protein)} · Ж ${round(item.fat)} · У ${round(item.carbs)}`))))
+      : h('p', { class: 'small muted' }, 'Позиции не сохранились, есть только итог.'),
+    entry.assumptions
+      ? h('p', { class: 'tiny faint', style: 'margin-top:10px' }, `Что учтено: ${entry.assumptions}`)
+      : null,
+    entry.confidence
+      ? h('p', { class: 'tiny faint' }, `Уверенность модели: ${CONFIDENCE_LABEL[entry.confidence] || entry.confidence}`)
+      : null);
+
+  return openSheet({
+    title: entry.name,
+    content,
+    onClose: () => {
+      if (url) URL.revokeObjectURL(url);
+    },
+  });
 }

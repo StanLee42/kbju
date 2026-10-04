@@ -29,7 +29,6 @@ export const DEFAULT_PRICES = {
 
 export const USAGE_KINDS = {
   photo: 'Анализ фото',
-  voice: 'Разбор сказанного',
   chat: 'Чат',
   greeting: 'Приветствие',
   summary: 'Выжимка разговора',

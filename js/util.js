@@ -25,19 +25,6 @@ export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-/**
- * Заменяет содержимое узла, отсеивая пустое.
- *
- * Ловушка replaceChildren: null и undefined становятся текстовыми узлами, и на экране
- * появляется слово «null». Глазами такое легко не заметить, поэтому отсеиваем здесь,
- * а не в каждом месте, где собирается разметка.
- */
-export function fill(node, ...children) {
-  node.replaceChildren(...children.flat()
-    .filter((child) => child !== null && child !== undefined && child !== false));
-  return node;
-}
-
 export function round(value, digits = 0) {
   const factor = 10 ** digits;
   return Math.round((Number(value) || 0) * factor) / factor;

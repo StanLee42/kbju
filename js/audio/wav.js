@@ -79,33 +79,6 @@ export function durationSeconds(sampleCount, rate = SPEECH_SAMPLE_RATE) {
   return rate > 0 ? sampleCount / rate : 0;
 }
 
-/** Пик, ниже которого запись считается тихой: в ней почти нет звука. */
-export const QUIET_PEAK = 0.02;
-
-/**
- * Громкость записи: пик и средний уровень.
- *
- * Нужна, чтобы отличить «человек говорил, модель не разобрала» от «запись пустая»:
- * на тишине распознавание выдаёт выдуманные слова, и без этой мерки такое выглядит
- * как ошибка модели, хотя дело в микрофоне.
- */
-export function recordLoudness(samples) {
-  if (!samples?.length) return { peak: 0, average: 0 };
-  let peak = 0;
-  let sum = 0;
-  for (const value of samples) {
-    const level = Math.abs(value);
-    if (level > peak) peak = level;
-    sum += level;
-  }
-  return { peak, average: sum / samples.length };
-}
-
-/** Слишком ли тихая запись, чтобы её вообще было слышно. */
-export function isTooQuiet(loudness) {
-  return (loudness?.peak ?? 0) < QUIET_PEAK;
-}
-
 /**
  * Собирает WAV из сэмплов.
  * @param {{samples: Float32Array, sampleRate?: number, channels?: number}} options
@@ -148,17 +121,11 @@ export function encodeWav({ samples, sampleRate = SPEECH_SAMPLE_RATE, channels =
   return buffer;
 }
 
-/**
- * Готовит записанные каналы к отправке: моно, нужная частота, WAV.
- *
- * Возвращаются и сами подготовленные сэмплы: распознавание речи на устройстве считает
- * по числам, а не по файлу, а второй раз пересчитывать их из WAV незачем.
- */
+/** Готовит записанные каналы к отправке: моно, нужная частота, WAV. */
 export function prepareSpeech({ channels, sampleRate, targetRate = SPEECH_SAMPLE_RATE }) {
   const mono = downmixToMono(channels);
   const resampled = resampleLinear(mono, sampleRate, targetRate);
   return {
-    samples: resampled,
     wav: encodeWav({ samples: resampled, sampleRate: targetRate }),
     sampleRate: targetRate,
     durationSeconds: durationSeconds(resampled.length, targetRate),

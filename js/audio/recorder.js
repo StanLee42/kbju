@@ -2,7 +2,7 @@
 //
 // Записываем сырые сэмплы, а не сжатый поток: из одних и тех же данных получается и WAV
 // для отправки в облако, и моно 16 кГц для распознавания на устройстве.
-import { prepareSpeech, recordLoudness, SPEECH_SAMPLE_RATE } from './wav.js';
+import { prepareSpeech, SPEECH_SAMPLE_RATE } from './wav.js';
 
 /**
  * @returns {Promise<object>} объект записи с методами start, stop, cancel и getLevel
@@ -22,12 +22,6 @@ export async function createRecorder({ targetRate = SPEECH_SAMPLE_RATE } = {}) {
   });
 
   const context = new (window.AudioContext || window.webkitAudioContext)();
-
-  // На телефоне контекст умеет создаться приостановленным, и тогда в запись пойдёт
-  // тишина: распознавание на тишине выдаёт выдуманные слова, и это выглядит как ошибка
-  // модели. Поэтому перед записью просим звук работать.
-  if (context.state === 'suspended') await context.resume();
-
   const source = context.createMediaStreamSource(stream);
   const analyser = context.createAnalyser();
   analyser.fftSize = 1024;
@@ -101,7 +95,7 @@ export async function createRecorder({ targetRate = SPEECH_SAMPLE_RATE } = {}) {
       return Math.min(1, Math.sqrt(sum / levelBuffer.length) * 4);
     },
 
-    /** Останавливает запись и возвращает готовый звук вместе с его громкостью. */
+    /** Останавливает запись и возвращает готовый звук. */
     stop() {
       recording = false;
       const samples = flatten();
@@ -113,7 +107,6 @@ export async function createRecorder({ targetRate = SPEECH_SAMPLE_RATE } = {}) {
       release();
       return {
         ...prepared,
-        loudness: recordLoudness(prepared.samples),
         blob: new Blob([prepared.wav], { type: 'audio/wav' }),
         sourceSampleRate: context.sampleRate,
       };

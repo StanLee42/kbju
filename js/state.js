@@ -38,7 +38,6 @@ function normalizeSettings(saved) {
     goal: { ...base.goal, ...(saved.goal || {}) },
     provider: { ...base.provider, ...(saved.provider || {}) },
     budget: { ...base.budget, ...(saved.budget || {}) },
-    voice: { ...base.voice, ...(saved.voice || {}) },
     prices: saved.prices || null,
     dayTypes: Array.isArray(saved.dayTypes) && saved.dayTypes.length ? saved.dayTypes : base.dayTypes,
     schedule: {
@@ -106,9 +105,8 @@ export async function addEntry(data) {
     carbs: Number(data.carbs) || 0,
     comment: data.comment || '',
     source: data.source || 'manual',
-    // Поля, которые заполняются только у записей из фотографии или из голоса.
+    // Поля, которые заполняются только у записей из фотографии.
     items: Array.isArray(data.items) ? data.items : null,
-    transcript: data.transcript ? String(data.transcript) : null,
     thumbId: data.thumbId || null,
     basis: data.basis || null,
     confidence: data.confidence || null,

@@ -2,10 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { KINDS, analyzeFood, analyzeSpoken, readImpedance } from '../js/llm/index.js';
+import { KINDS, analyzeFood, readImpedance } from '../js/llm/index.js';
 import { providerError } from '../js/llm/errors.js';
 import { extractJson, parseAnalysis, parseImpedance } from '../js/llm/parse.js';
-import { SYSTEM_PROMPT, VOICE_SYSTEM_PROMPT } from '../js/llm/prompt.js';
 
 const validAnswer = JSON.stringify({
   dish: 'Паста с сыром',
@@ -164,27 +163,4 @@ test('разбор отчёта ходит через тот же слой с п
   assert.equal(result.ok, true);
   assert.equal(result.data.bmr, 1800);
   assert.equal(provider.calls[0].maxTokens > 0, true);
-});
-
-test('сказанное вслух уходит модели текстом и разбирается той же схемой', async () => {
-  const provider = stubProvider([{ text: validAnswer }]);
-  const result = await analyzeSpoken({ provider, text: 'съел двести граммов куриной грудки' });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.data.items.length, 2);
-
-  const request = provider.calls[0];
-  assert.equal(request.image, null, 'снимка при голосовом вводе нет');
-  assert.equal(request.text, 'съел двести граммов куриной грудки');
-  assert.equal(request.system, VOICE_SYSTEM_PROMPT);
-});
-
-test('голосовой промпт требует не выдумывать лишнего и признавать неизвестный вес', () => {
-  assert.notEqual(VOICE_SYSTEM_PROMPT, SYSTEM_PROMPT);
-  assert.match(VOICE_SYSTEM_PROMPT, /вслух|продиктовал/i);
-  assert.match(VOICE_SYSTEM_PROMPT, /не добавляй/);
-  assert.match(VOICE_SYSTEM_PROMPT, /assumptions/);
-  // Схема ответа общая с фотографией: разбирает её один и тот же код.
-  assert.match(VOICE_SYSTEM_PROMPT, /"basis"/);
-  assert.match(SYSTEM_PROMPT, /"basis"/);
 });

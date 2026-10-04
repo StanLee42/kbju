@@ -9,7 +9,6 @@ import {
   IMPEDANCE_SYSTEM_PROMPT, IMPEDANCE_USER_PROMPT,
   MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS_RETRY,
   SYSTEM_PROMPT, USER_PROMPT,
-  VOICE_SYSTEM_PROMPT, VOICE_USER_PROMPT,
 } from './prompt.js';
 
 export { KINDS, describeError } from './errors.js';
@@ -90,13 +89,6 @@ async function runWithRetry({ provider, system, user, image, text, parse }) {
 export async function analyzeFood({ provider, image = null, text = null }) {
   return runWithRetry({
     provider, system: SYSTEM_PROMPT, user: USER_PROMPT, image, text, parse: parseAnalysis,
-  });
-}
-
-/** То же самое, но по сказанной вслух фразе: снимка нет, вес часто назван словами. */
-export async function analyzeSpoken({ provider, text }) {
-  return runWithRetry({
-    provider, system: VOICE_SYSTEM_PROMPT, user: VOICE_USER_PROMPT, image: null, text, parse: parseAnalysis,
   });
 }
 
