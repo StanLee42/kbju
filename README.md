@@ -119,6 +119,26 @@ node tools/spike-deepseek.mjs --limit 2                     # прогон сн�
 Скрипты сами выгружают системные корневые сертификаты macOS: у Node на этой машине пустое
 встроенное хранилище, и без этого запросы падают с ошибкой проверки сертификата.
 
+### Эмулятор Android
+
+Проверять приложение можно на настоящем Chrome для Android, не беря телефон в руки.
+Инструменты установлены в `/opt/homebrew/share/android-commandlinetools`, виртуальное
+устройство называется `kbju`.
+
+```
+emulator -avd kbju &                    # запустить виртуальное устройство (окно откроется)
+adb reverse tcp:8765 tcp:8765           # дать эмулятору доступ к локальному серверу
+node tools/emu.mjs open http://127.0.0.1:8765/
+node tools/emu.mjs shot /tmp/emu.png    # снимок экрана
+node tools/emu.mjs ui                   # список надписей на экране с координатами
+node tools/emu.mjs tap-text "No thanks" # нажать по надписи
+node tools/emu.mjs tap 945 1844         # нажать по координатам
+
+# отладка Chrome внутри эмулятора: те же проверки, что и в headless
+adb forward tcp:9223 localabstract:chrome_devtools_remote
+CDP_PORT=9223 node tools/cdp-layout.mjs http://127.0.0.1:8765
+```
+
 ## Публикация на телефон
 
 Публикуется не репозиторий, а собранная папка только с файлами приложения:

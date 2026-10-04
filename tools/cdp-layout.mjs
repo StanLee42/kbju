@@ -132,6 +132,11 @@ for (const width of WIDTHS) {
         offenders: offenders.slice(0, 4),
         tabs,
         screenErrors: Boolean(document.getElementById('view')?.dataset.errorShown),
+        // Служебные слова в тексте — след пустых значений, которые браузер
+        // превратил в текстовые узлы. Такое видно глазами, но легко пропустить.
+        strayText: ['null', 'undefined', 'NaN']
+          .filter((word) => new RegExp('(^|\\\\s)' + word + '($|\\\\s)').test(document.body.innerText))
+          .join(', '),
       });
     })()`);
 
@@ -150,6 +155,9 @@ for (const width of WIDTHS) {
       problems.push(`${line}: нижнее меню не помещается: ${tabProblems.join(', ')}`);
     }
     if (data.screenErrors) problems.push(`${line}: на экране показана ошибка`);
+    if (data.strayText) {
+      problems.push(`${line}: на экран попали служебные слова — ${data.strayText}`);
+    }
 
     console.log(`${line}: вёрстка ${data.layoutWidth}px, экран ${width}px, перелив ${data.overflow}px, `
       + `вкладок ${data.tabs?.length ?? 0}, за краем ${(data.offenders || []).length}`);
