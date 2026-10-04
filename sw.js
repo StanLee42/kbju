@@ -36,6 +36,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
+  // Запросы, которые явно просят не смотреть в кэш (например файл версии сборки),
+  // пропускаем прямо в сеть. Иначе кэш оболочки начнёт врать: он сопоставляет
+  // запрос по адресу и не смотрит на пожелания запрашивающего.
+  if (request.cache === 'no-store' || request.cache === 'reload') return;
+
   const url = new URL(request.url);
   // Запросы к моделям и любые внешние адреса не трогаем.
   if (url.origin !== self.location.origin) return;

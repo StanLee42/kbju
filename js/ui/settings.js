@@ -73,7 +73,8 @@ export function mount(container) {
    * иначе service worker отдаст старую строку и смысл проверки потеряется.
    */
   function buildVersionLine() {
-    const line = h('p', { class: 'tiny faint center' }, 'версия приложения: определяем…');
+    const line = h('p', { class: 'tiny faint center' },
+      'версия приложения: определяем… (строка обновляется при каждой сборке)');
 
     fetch('./version.txt', { cache: 'no-store' })
       .then((response) => (response.ok ? response.text() : Promise.reject(new Error('нет файла версии'))))
