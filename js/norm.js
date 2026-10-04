@@ -1,5 +1,5 @@
 // Нормы, типы дней и расписание. Здесь только вычисления, никакого DOM.
-import { isoDate, todayISO, daysBetween, weekdayKey } from './util.js';
+import { isoDate, todayISO, daysBetween, weekdayKey, num, round } from './util.js';
 
 export const DEFAULT_SETTINGS = {
   id: 'app',
@@ -104,5 +104,124 @@ export function describeSchedule(settings, dateISO = todayISO()) {
     isCycle,
     isOverride: Boolean(override),
     source: override ? 'вручную' : (isCycle ? 'по циклу' : 'по дню недели'),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Расчёт норм из измеренного состава тела.
+//
+// Считаем здесь, а не в модели: формулы арифметические, их можно проверить тестами,
+// а результат не зависит от настроения модели.
+// ---------------------------------------------------------------------------
+
+export const NORM_DEFAULTS = {
+  proteinPerKgLean: 1.9, // середина диапазона 1,6–2,2 г на кг тощей массы
+  fatPerKgMin: 0.8,
+  fatPerKgTraining: 0.9,
+  kcalPerKgFat: 7700, // калорий в килограмме жировой ткани
+  activityRest: 1.375, // лёгкая активность без тренировки
+  trainingExtraKcal: 400, // час силовой работы при весе около 90 кг
+  deficitShareTraining: 0.7, // в тренировочный день дефицит меньше
+};
+
+/** Основной обмен по формуле Миффлина — запасной путь, когда измерения нет. */
+export function mifflinStJeor({ sex, weight, height, age }) {
+  if (!weight || !height || !age) return null;
+  const base = 10 * weight + 6.25 * height - 5 * age;
+  if (sex === 'F') return round(base - 161);
+  if (sex === 'M') return round(base + 5);
+  return round(base - 78); // среднее между полами
+}
+
+/**
+ * Нормы на тренировочный и обычный день по составу тела.
+ *
+ * @returns {{ok: false, error: string} | {ok: true, rest: object, training: object,
+ *   weekly: object, base: object, steps: string[], assumptions: string[]}}
+ */
+export function normsFromMeasurement({
+  measurement = {},
+  pace = 0.5,
+  trainingDays = 3,
+  restDays = 4,
+  defaults = NORM_DEFAULTS,
+} = {}) {
+  const assumptions = [];
+  const steps = [];
+
+  const weight = num(measurement.weight) || null;
+  const leanMass = num(measurement.leanMass) || null;
+  const bmrMeasured = num(measurement.bmr) || null;
+
+  let bmr = bmrMeasured;
+  if (bmr) {
+    steps.push(`Основной обмен ${round(bmr)} ккал взят из отчёта, это измеренное значение.`);
+  } else {
+    bmr = mifflinStJeor({
+      sex: measurement.sex,
+      weight: measurement.weight,
+      height: measurement.height,
+      age: measurement.age,
+    });
+    if (!bmr) {
+      return { ok: false, error: 'не хватает данных: нужен измеренный основной обмен либо пол, вес, рост и возраст' };
+    }
+    assumptions.push('Измеренного основного обмена нет, взят расчёт по формуле Миффлина.');
+    steps.push(`Основной обмен ${round(bmr)} ккал посчитан по формуле Миффлина.`);
+  }
+
+  if (!weight) return { ok: false, error: 'не хватает массы тела для расчёта жиров' };
+
+  let lean = leanMass;
+  if (!lean) {
+    lean = round(weight * 0.75, 1);
+    assumptions.push('Тощая масса неизвестна, принята как 75% от массы тела — это грубая оценка.');
+  }
+
+  const tdeeRest = bmr * defaults.activityRest;
+  const tdeeTraining = tdeeRest + defaults.trainingExtraKcal;
+  steps.push(`Расход обычного дня ${round(tdeeRest)} ккал: ${round(bmr)} × ${defaults.activityRest}.`);
+  assumptions.push(`Коэффициент активности ${defaults.activityRest} принят для лёгкой активности.`);
+  steps.push(`Расход тренировочного дня ${round(tdeeTraining)} ккал: плюс ${defaults.trainingExtraKcal} ккал на тренировку.`);
+  assumptions.push(`Расход тренировки принят ${defaults.trainingExtraKcal} ккал — час силовой работы с разминкой.`);
+
+  const weeklyDeficit = pace * defaults.kcalPerKgFat;
+  const share = restDays + defaults.deficitShareTraining * trainingDays;
+  const deficitRest = weeklyDeficit / share;
+  const deficitTraining = deficitRest * defaults.deficitShareTraining;
+  steps.push(`Недельный дефицит ${round(weeklyDeficit)} ккал под темп ${pace} кг в неделю.`);
+  steps.push(`Дефицит ${round(deficitRest)} ккал в обычный день и ${round(deficitTraining)} в тренировочный: в дни нагрузки он мягче.`);
+
+  const protein = round(defaults.proteinPerKgLean * lean);
+  steps.push(`Белок ${protein} г: тощая масса ${lean} кг × ${defaults.proteinPerKgLean} г/кг.`);
+
+  const fatRest = round(defaults.fatPerKgMin * weight);
+  const fatTraining = round(defaults.fatPerKgTraining * weight);
+  steps.push(`Жир ${fatRest} г в обычный день и ${fatTraining} г в тренировочный — от массы тела ${weight} кг.`);
+
+  const kcalRest = round(tdeeRest - deficitRest);
+  const kcalTraining = round(tdeeTraining - deficitTraining);
+
+  const carbsOf = (kcal, fat) => Math.max(0, round((kcal - protein * 4 - fat * 9) / 4));
+  const carbsRest = carbsOf(kcalRest, fatRest);
+  const carbsTraining = carbsOf(kcalTraining, fatTraining);
+  steps.push(`Углеводы добирают остаток калорий: ${carbsRest} г и ${carbsTraining} г.`);
+
+  const weeklyKcal = (kcalRest * restDays + kcalTraining * trainingDays) / (restDays + trainingDays);
+  const weeklyDeficitActual = deficitRest * restDays + deficitTraining * trainingDays;
+  steps.push(`Среднее по неделе ${round(weeklyKcal)} ккал, недельный дефицит ${round(weeklyDeficitActual)} ккал.`);
+
+  return {
+    ok: true,
+    base: { bmr: round(bmr), leanMass: lean, weight, pace, measuredBmr: Boolean(bmrMeasured) },
+    rest: { kcal: kcalRest, protein, fat: fatRest, carbs: carbsRest },
+    training: { kcal: kcalTraining, protein, fat: fatTraining, carbs: carbsTraining },
+    weekly: {
+      kcal: round(weeklyKcal),
+      deficit: round(weeklyDeficitActual),
+      expectedLossKg: round(weeklyDeficitActual / defaults.kcalPerKgFat, 2),
+    },
+    steps,
+    assumptions,
   };
 }
