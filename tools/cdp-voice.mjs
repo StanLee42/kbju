@@ -117,7 +117,7 @@ const state = () => evaluate(`JSON.stringify({
   текст: document.querySelector('.sheet')?.innerText?.slice(0, 700) || '',
   расшифровка: document.querySelector('textarea.transcript')?.value ?? null,
   ошибка: Boolean(document.querySelector('#view')?.dataset.errorShown),
-  версия: document.querySelector('#view')?.innerText?.includes('версия приложения') || false
+  версия: document.querySelector('#view')?.innerText?.includes('версия на сервере') || false
 })`);
 
 await send('Runtime.enable');

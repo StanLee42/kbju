@@ -56,6 +56,19 @@ async function main() {
   store.storagePersistent = await isStoragePersistent();
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // Новая сборка забирает управление сразу: в sw.js стоят skipWaiting и claim. Но уже
+    // открытая страница продолжает работать на старых файлах до следующей загрузки, и
+    // человек видит старое приложение, хотя в настройках уже новая версия. Поэтому
+    // перезагружаемся один раз сами, как только управление перешло к новой сборке.
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // Первая установка тоже забирает управление — перезагружаться из-за неё незачем.
+      if (!hadController || reloading) return;
+      reloading = true;
+      location.reload();
+    });
+
     navigator.serviceWorker.register('./sw.js').catch((error) => {
       console.warn('service worker не зарегистрирован', error);
     });
