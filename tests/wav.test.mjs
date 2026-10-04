@@ -98,6 +98,10 @@ test('подготовка речи даёт моно 16 кГц нужной д�
   assert.equal(prepared.sampleRate, SPEECH_SAMPLE_RATE);
   assert.ok(Math.abs(prepared.durationSeconds - 1) < 0.01);
   assert.equal(prepared.wav.byteLength, 44 + 16000 * 2);
+  // Сэмплы отдаются вместе с файлом: по ним считает распознавание на устройстве,
+  // и разбирать для этого WAV обратно не нужно.
+  assert.equal(prepared.samples.length, 16000);
+  assert.ok(prepared.samples instanceof Float32Array);
 });
 
 test('длительность считается по частоте', () => {

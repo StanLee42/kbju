@@ -328,6 +328,50 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* Столбик выбора: подпись сверху, пояснение снизу. Такие кнопки читаются лучше,
+   чем ряд равных долей, когда подписей больше трёх и они разной длины. */
+.choice { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.choice button { text-align: left; }
+.choice button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev-2));
+}
+
+/* ---------- Запись голоса ---------- */
+
+/* Строка записи: слева полоска громкости, справа время. Полоска растёт от нуля,
+   поэтому её ширина задаётся из кода, а не стилями. */
+.rec-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+
+.level {
+  flex: 1;
+  height: 10px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.level-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width .1s linear;
+}
+
+/* Пока считает модель, громкость показывать нечего — полоска медленно едет сама. */
+.level-wait { animation: level-wait 1.6s ease-in-out infinite; }
+
+@keyframes level-wait {
+  0% { width: 5%; }
+  50% { width: 85%; }
+  100% { width: 5%; }
+}
+
+.timer { font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 13px; min-width: 84px; text-align: right; }
+
+.transcript { margin-top: 10px; resize: vertical; min-height: 74px; }
+
 /* ---------- Нижнее меню ---------- */
 
 .tabbar {
