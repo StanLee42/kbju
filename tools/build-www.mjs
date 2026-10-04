@@ -53,30 +53,18 @@ async function main() {
     return 1;
   }
 
-  // Service worker кэширует список файлов: если путь в нём опечатан,
-  // установка приложения на телефон сломается. Проверяем заранее.
-  const sw = await readFile(join(target, 'sw.js'), 'utf8');
-  const shell = sw.match(/const SHELL = \[([\s\S]*?)\];/);
-  if (!shell) {
-    console.error('в sw.js не найден список SHELL');
+  const swPath = join(target, 'sw.js');
+  const swText = await readFile(swPath, 'utf8');
+
+  // Список файлов для офлайна формируем здесь, а не поддерживаем руками:
+  // иначе он неизбежно разойдётся с реальным составом приложения.
+  const shell = ['./', ...files.map((file) => `./${file}`)];
+  const shellCode = `const SHELL = [\n${shell.map((path) => `  '${path}',`).join('\n')}\n];`;
+  const withShell = swText.replace(/const SHELL = \[[\s\S]*?\];/, shellCode);
+  if (withShell === swText) {
+    console.error('не удалось подставить список файлов в sw.js: константа SHELL не найдена');
     return 1;
   }
-  const paths = [...shell[1].matchAll(/'([^']+)'/g)]
-    .map((match) => match[1])
-    .filter((path) => path !== './');
-
-  const missing = [];
-  for (const path of paths) {
-    const info = await stat(join(target, path)).catch(() => null);
-    if (!info) missing.push(path);
-  }
-  if (missing.length) {
-    console.error('service worker ссылается на отсутствующие файлы:');
-    for (const path of missing) console.error(`  ${path}`);
-    return 1;
-  }
-
-  console.log(`service worker: все ${paths.length} путей на месте`);
 
   // Имя кэша должно меняться вместе с содержимым. Иначе после публикации новой версии
   // service worker продолжит отдавать старые файлы, и на телефоне ничего не обновится.
@@ -84,15 +72,34 @@ async function main() {
   for (const file of files) hash.update(await readFile(join(target, file)));
   const version = `kbju-${hash.digest('hex').slice(0, 8)}`;
 
-  const swPath = join(target, 'sw.js');
-  const swText = await readFile(swPath, 'utf8');
-  const stamped = swText.replace(/const VERSION = '[^']*'/, `const VERSION = '${version}'`);
-  if (stamped === swText) {
+  const stamped = withShell.replace(/const VERSION = '[^']*'/, `const VERSION = '${version}'`);
+  if (stamped === withShell) {
     console.error('не удалось подставить версию в sw.js: константа VERSION не найдена');
     return 1;
   }
   await writeFile(swPath, stamped, 'utf8');
   console.log(`версия сборки: ${version} — кэш обновится при первой загрузке`);
+  console.log(`в офлайн-кэш включено файлов: ${shell.length}`);
+
+  // Версию видно и снаружи: файл читается приложением на экране настроек,
+  // поэтому всегда понятно, какая сборка живёт на телефоне и на хостинге.
+  await writeFile(
+    join(target, 'version.txt'),
+    `${version}\nсобрано ${new Date().toISOString()}\n`,
+    'utf8',
+  );
+
+  // Проверяем, что подставленный список ссылается только на существующие файлы.
+  const missing = [];
+  for (const path of shell.slice(1)) {
+    const info = await stat(join(target, path.slice(2))).catch(() => null);
+    if (!info) missing.push(path);
+  }
+  if (missing.length) {
+    console.error('в списке офлайн-кэша есть отсутствующие файлы:');
+    for (const path of missing) console.error(`  ${path}`);
+    return 1;
+  }
 
   console.log('готово. Перетащите эту папку в https://app.netlify.com/drop');
   return 0;

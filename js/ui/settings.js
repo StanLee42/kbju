@@ -63,9 +63,41 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Хранилище' }),
       storageHost),
+    buildVersionLine(),
   );
 
-  // --- провайдер анализа ---
+  // --- версия сборки ---
+
+  /**
+   * Показывает, какая сборка сейчас работает. Файл версии читаем в обход кэша,
+   * иначе service worker отдаст старую строку и смысл проверки потеряется.
+   */
+  function buildVersionLine() {
+    const line = h('p', { class: 'tiny faint center' },
+      'версия приложения: определяем… (строка обновляется при каждой сборке)');
+
+    fetch('./version.txt', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.text() : Promise.reject(new Error('нет файла версии'))))
+      .then((text) => {
+        const [version, builtLine] = String(text).trim().split('\n');
+        const built = builtLine?.replace(/^собрано /, '');
+        let when = '';
+        if (built) {
+          const date = new Date(built);
+          if (!Number.isNaN(date.getTime())) {
+            when = ` · сборка ${date.toLocaleString('ru-RU', {
+              day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+            })}`;
+          }
+        }
+        line.textContent = `версия приложения: ${version}${when}`;
+      })
+      .catch(() => {
+        line.textContent = 'версия приложения: сборка для разработки';
+      });
+
+    return line;
+  }
 
   let keyCheck = null;
   let keyBusy = false;
@@ -99,12 +131,17 @@ export function mount(container) {
       value: id, text: id === 'deepseek' ? 'DeepSeek' : id, selected: (provider.id || 'deepseek') === id,
     })));
 
-    providerHost.replaceChildren(
-      AVAILABLE_PROVIDERS.length > 1
-        ? h('label', { class: 'field' },
-          h('span', { class: 'field-label', text: 'Провайдер' }),
-          providerSelect)
-        : null,
+    // Внимание: replaceChildren превращает null в текстовый узел «null»,
+    // поэтому пустые элементы отсеиваем заранее.
+    const nodes = [];
+
+    if (AVAILABLE_PROVIDERS.length > 1) {
+      nodes.push(h('label', { class: 'field' },
+        h('span', { class: 'field-label', text: 'Провайдер' }),
+        providerSelect));
+    }
+
+    nodes.push(
       h('label', { class: 'field' },
         h('span', { class: 'field-label', text: 'Ключ' }),
         keyInput),
@@ -118,15 +155,19 @@ export function mount(container) {
           disabled: keyBusy,
           onclick: checkKey,
         })),
-      keyCheck
-        ? h('p', {
-          class: 'small', style: `margin-top:10px;${keyCheck.ok ? '' : 'color:var(--over)'}`,
-        }, keyCheck.text)
-        : null,
-      h('p', { class: 'tiny faint', style: 'margin-top:10px' },
-        'Ключ хранится только на устройстве: он не попадает ни в выгрузку дневника, '
-        + 'ни в публикацию приложения. Проверка ключа бесплатна — она спрашивает только баланс.'),
     );
+
+    if (keyCheck) {
+      nodes.push(h('p', {
+        class: 'small', style: `margin-top:10px;${keyCheck.ok ? '' : 'color:var(--over)'}`,
+      }, keyCheck.text));
+    }
+
+    nodes.push(h('p', { class: 'tiny faint', style: 'margin-top:10px' },
+      'Ключ хранится только на устройстве: он не попадает ни в выгрузку дневника, '
+      + 'ни в публикацию приложения. Проверка ключа бесплатна — она спрашивает только баланс.'));
+
+    providerHost.replaceChildren(...nodes);
   }
 
   async function checkKey() {

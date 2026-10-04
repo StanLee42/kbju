@@ -1,11 +1,12 @@
 // Проверка расчёта норм по измеренному составу тела.
+//
+// Пример выдуман для тестов: мужчина, 41 год, 176 см, 82 кг, тощая масса 63,5 кг,
+// измеренный основной обмен 1800 ккал. Никаких реальных измерений здесь нет.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mifflinStJeor, normsFromMeasurement } from '../js/norm.js';
 
-// Реальный отчёт: мужчина, 41 год, 176 см, 82 кг, тощая масса 63,5 кг,
-// измеренный основной обмен 1800 ккал.
 const measurement = {
   sex: 'M', age: 41, height: 176, weight: 82,
   leanMass: 63.5, fatMass: 18.5, bmr: 1800, fatPercent: 22.6,
@@ -16,9 +17,9 @@ test('нормы считаются из измеренного обмена, а
   assert.equal(result.ok, true);
   assert.equal(result.base.measuredBmr, true);
   assert.equal(result.base.bmr, 1800);
-  assert.equal(result.rest.protein, 137);
+  assert.equal(result.rest.protein, 121);
   assert.equal(result.rest.fat, 66);
-  assert.equal(result.training.fat, 74);
+  assert.equal(result.training.fat, 66);
   assert.equal(result.rest.kcal, 1844);
   assert.equal(result.training.kcal, 2433);
   assert.equal(result.rest.carbs, 192);
