@@ -72,13 +72,20 @@ export function mount(container) {
    * Показывает, какая сборка сейчас работает. Файл версии читаем в обход кэша,
    * иначе service worker отдаст старую строку и смысл проверки потеряется.
    */
+  /**
+   * Показывает, какая сборка сейчас работает, и какая лежит на сервере.
+   *
+   * Работающую сборку сообщает служба, которая обслуживает страницу. Это важно: человек
+   * уже дважды видел старое приложение, глядя на новую версию в этой строке — файл версии
+   * читается в обход кэша, поэтому показывает сервер, а не то, что открыто сейчас.
+   */
   function buildVersionLine() {
-    const line = h('p', { class: 'tiny faint center' },
-      'версия на сервере: определяем… (строка обновляется при каждой сборке)');
+    const line = h('p', { class: 'tiny faint center' }, 'версия: определяем…');
+    const hint = h('p', { class: 'tiny faint center', style: 'margin-top:6px' },
+      'Когда приходит новая сборка, приложение перезагружается само — и при запуске, '
+      + 'и когда вы возвращаетесь к нему. Кнопка нужна, если этого не случилось.');
 
-    // Установленное приложение обновляется само при перезапуске, но своей кнопки
-    // обновления у него нет — браузер её не показывает. Эта кнопка проверяет
-    // обновление и перезагружает страницу, чтобы новая сборка подхватилась сразу.
+    // Своей кнопки обновления у установленного приложения нет — браузер её не показывает.
     const refresh = h('button', {
       class: 'btn btn-small', type: 'button', text: 'Обновить приложение',
       onclick: async () => {
@@ -90,36 +97,58 @@ export function mount(container) {
           // Даже если проверка не удалась, перезагрузка полезна: она берёт
           // файлы из сети, если они там новее.
         }
-        setTimeout(() => location.reload(), 400);
+        setTimeout(() => location.reload(), 600);
       },
     });
 
-    fetch('./version.txt', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.text() : Promise.reject(new Error('нет файла версии'))))
-      .then((text) => {
-        const [version, builtLine] = String(text).trim().split('\n');
-        const built = builtLine?.replace(/^собрано /, '');
-        let when = '';
-        if (built) {
-          const date = new Date(built);
-          if (!Number.isNaN(date.getTime())) {
-            when = ` · сборка ${date.toLocaleString('ru-RU', {
-              day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
-            })}`;
-          }
-        }
-        line.textContent = `версия на сервере: ${version}${when}`;
-      })
-      .catch(() => {
-        line.textContent = 'версия на сервере: сборка для разработки';
-      });
+    Promise.all([runningVersion(), serverVersion()]).then(([running, server]) => {
+      if (!running) {
+        // Службы ещё нет: страница только что загрузилась из сети, значит работает то,
+        // что лежит на сервере.
+        line.textContent = server ? `сборка на сервере: ${server}` : 'сборка для разработки';
+        return;
+      }
+      if (server && server !== running) {
+        line.textContent = `работает сборка: ${running} · на сервере новее: ${server}`;
+        line.style.color = 'var(--over)';
+        hint.textContent = 'На сервере уже новая сборка. Нажмите «Обновить приложение» — '
+          + 'она подхватится сразу.';
+        return;
+      }
+      line.textContent = `работает сборка: ${running}`;
+    });
 
     return h('div', {},
       line,
       h('div', { class: 'chips', style: 'justify-content:center;margin-top:6px' }, refresh),
-      h('p', { class: 'tiny faint center', style: 'margin-top:6px' },
-        'Когда приходит новая сборка, приложение перезагружается само. Кнопка нужна, '
-        + 'если оно было открыто всё это время: она проверяет обновление и перезагружает.'));
+      hint);
+  }
+
+  /** Сборка, которая обслуживает страницу: её сообщает сама служба. */
+  function runningVersion() {
+    const controller = navigator.serviceWorker?.controller;
+    if (!controller) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const channel = new MessageChannel();
+      const timer = setTimeout(() => resolve(null), 1500);
+      channel.port1.onmessage = (event) => {
+        clearTimeout(timer);
+        resolve(event.data?.version || null);
+      };
+      controller.postMessage({ type: 'version' }, [channel.port2]);
+    });
+  }
+
+  /** Сборка, которая лежит на сервере: файл читаем в обход кэша. */
+  async function serverVersion() {
+    try {
+      const response = await fetch('./version.txt', { cache: 'no-store' });
+      if (!response.ok) return null;
+      const [version] = String(await response.text()).trim().split('\n');
+      return version || null;
+    } catch {
+      return null;
+    }
   }
 
   let keyCheck = null;

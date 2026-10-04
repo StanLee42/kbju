@@ -69,8 +69,21 @@ async function main() {
       location.reload();
     });
 
-    navigator.serviceWorker.register('./sw.js').catch((error) => {
+    const registration = await navigator.serviceWorker.register('./sw.js').catch((error) => {
       console.warn('service worker не зарегистрирован', error);
+      return null;
+    });
+
+    // Телефон держит приложение в памяти и не открывает его заново — значит, и новую
+    // сборку не проверяет: браузер спрашивает о ней только при загрузке страницы.
+    // Поэтому спрашиваем сами каждый раз, когда человек возвращается к приложению:
+    // запрос к sw.js крошечный, а свежесть важнее. Второй проверки одновременно не бывает.
+    let checking = false;
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState !== 'visible' || !registration || checking) return;
+      checking = true;
+      await registration.update().catch(() => {});
+      checking = false;
     });
   }
 }

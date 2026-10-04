@@ -16,6 +16,15 @@ const SHELL = [
   './icons/icon-512.png',
 ];
 
+// Отвечаем, какая сборка обслуживает страницу: строка версии в настройках должна показывать
+// работающую сборку, а не ту, что лежит на сервере. Это разные вещи ровно тогда, когда
+// приложение открыто с прошлого раза и ещё не подхватило новую.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'version') return;
+  const port = event.ports && event.ports[0];
+  if (port) port.postMessage({ version: VERSION });
+});
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)

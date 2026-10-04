@@ -200,7 +200,7 @@ const afterTap = await evaluate(`JSON.stringify({
   заголовок: document.querySelector('#view h1')?.textContent || '',
   секций: document.querySelectorAll('section.card').length,
   версия: [...document.querySelectorAll('p')].map((p) => p.textContent)
-    .find((text) => text.includes('версия на сервере')) || 'нет строки версии',
+    .find((text) => text.includes('сборка')) || 'нет строки версии',
 })`);
 console.log(`после нажатия: ${afterTap}`);
 

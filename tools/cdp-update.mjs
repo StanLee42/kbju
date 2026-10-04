@@ -92,6 +92,12 @@ try {
   await send('Page.reload', { ignoreCache: true });
   await wait(3000);
 
+  // Ещё одна загрузка: в жизни приложение уже давно под управлением службы, и на момент
+  // загрузки она есть. На первой загрузке её не было (мы её только что сняли), и тогда
+  // перезагружаться намеренно не из-за чего.
+  await send('Page.reload', { ignoreCache: false });
+  await wait(3000);
+
   const first = await state();
   console.log(`первая загрузка: служба управляет — ${first.управляет}, кэши: ${first.кэши}`);
   if (!first.управляет) problems.push('service worker не взял управление — обновление проверять нечем');
@@ -106,17 +112,26 @@ try {
   await writeFile(swPath, original.replace(/const VERSION = '[^']*'/, `const VERSION = '${nextVersion}'`), 'utf8');
   console.log(`подменили сборку: ${firstVersion} → ${nextVersion}`);
 
+  // Случай, который и случился у владельца: приложение не перезапускают, а возвращаются
+  // к нему — Android держит его в памяти, и загрузки страницы не происходит вовсе.
+  // Проверяем, что и тогда сборка подхватывается сама.
   loadEvents = 0;
-  await send('Page.reload', { ignoreCache: false });
-  // Ждём: загрузка страницы, установка новой сборки, передача управления, самостоятельная перезагрузка.
+  await evaluate(`(async () => {
+    // Возвращение к приложению: страница становится видимой.
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return 'вернулись к приложению';
+  })()`);
   await wait(9000);
 
   const after = await state();
   console.log(`после подмены: загрузок страницы — ${loadEvents}, служба управляет — ${after.управляет}`);
   console.log(`кэши: ${after.кэши}`);
 
-  if (loadEvents < 2) {
-    problems.push(`приложение не перезагрузилось само: загрузок ${loadEvents}, ожидалось две`);
+  // При возврате к приложению страница не загружается заново, поэтому ждём одну
+  // самостоятельную перезагрузку: она и означает, что новая сборка подхватилась.
+  if (loadEvents < 1) {
+    problems.push(`приложение не перезагрузилось само после возврата к нему: загрузок ${loadEvents}`);
   }
   if (!String(after.кэши).includes(nextVersion)) {
     problems.push(`новая сборка не встала в кэш: ${after.кэши}`);
