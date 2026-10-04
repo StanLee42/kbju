@@ -143,6 +143,7 @@ test('временная ошибка сети повторяется', async ()
 });
 
 test('измерения из отчёта разбираются, пустой ответ — ошибка', () => {
+  // Пример выдуман для тестов: никаких реальных измерений здесь нет.
   const answer = JSON.stringify({
     date: '2026-09-15', sex: 'M', age: 41, height: 176, weight: 82, waist: 88, hips: 96,
     bmi: 26.5, fatMass: 18.5, leanMass: 63.5, activeCellMass: 41.2, skeletalMuscleMass: 33.1,
