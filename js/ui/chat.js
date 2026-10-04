@@ -1,12 +1,14 @@
-// Добавление еды разговором: одно окно, в котором можно написать словами, приложить снимок
-// или сделать и то и другое, а потом уточнить разбор словами.
+// Добавление еды разговором: мини-чат, в котором человек пишет словами, прикладывает снимки,
+// отвечает на уточняющие вопросы модели, а записать блюдо в дневник может в любой момент.
 //
-// Разбор здесь — предложение, а не запись: в дневник он попадает только по кнопке
-// в карточке. Пока разговор открыт, уточнения меняют тот же разбор; закрыли окно —
-// разговор пропал, а сохранённое осталось.
+// Два правила, из которых следует всё остальное:
+// 1. Текущий разбор виден всегда — он показан отдельной полосой над полем ввода, а не только
+//    последним сообщением: разговор можно листать, а числа остаются перед глазами.
+// 2. Запись в дневник — только по кнопке. Разговор сам ничего не сохраняет.
 import { analyzeChat, createProvider, describeError } from '../llm/index.js';
 import { pickImage, prepareForApi, makeThumbnail } from '../media/image.js';
 import { addEntry, saveThumb, store } from '../state.js';
+import { sumItems } from '../portion.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, nowTime, round } from '../util.js';
 import { openAddSheet } from './add.js';
@@ -20,71 +22,103 @@ export function openChatSheet({ date = null } = {}) {
   const keyMissing = !providerConfig.key;
 
   const state = {
-    messages: [],
-    draft: null,
-    photo: null, // приложенный снимок, ещё не отправленный
+    messages: [], // { role, text, photo, analysis, error }
+    draft: null, // последний разбор: уходит модели следующим сообщением
+    current: null, // текущие значения: позиции, итог, множитель (их и записываем)
+    cost: 0,
+    photo: null,
     photoPreview: null,
     text: '',
     busy: false,
   };
 
-  let card = null;
-
   const thread = h('div', { class: 'thread' });
+  const draftBar = h('div', { class: 'draft-bar', hidden: true });
   const composer = h('div', {});
-  const host = h('div', {}, thread, composer);
+  const host = h('div', {}, thread, draftBar, composer);
   const sheet = openSheet({ title: 'Добавить еду', content: host });
 
-  // --- разговор ---
+  // --- переписка ---
 
-  function userMessage(text, photo) {
+  function userMessage(message) {
     return h('div', { class: 'msg msg-user' },
-      photo ? h('img', { class: 'msg-photo', src: photo, alt: 'снимок' }) : null,
-      text ? h('div', { class: 'msg-text' }, text) : null);
+      message.photo ? h('img', { class: 'msg-photo', src: message.photo, alt: 'снимок' }) : null,
+      message.text ? h('div', { class: 'msg-text' }, message.text) : null);
   }
 
-  /** Краткая строка прежнего разбора: полная карточка нужна только у последнего. */
-  function summaryLine(analysis) {
-    const totals = (analysis.items || []).reduce((acc, item) => ({
-      grams: acc.grams + (Number(item.grams) || 0),
-      kcal: acc.kcal + (Number(item.kcal) || 0),
-    }), { grams: 0, kcal: 0 });
-    return h('div', { class: 'msg-text small' },
-      `${analysis.dish} — ${round(totals.grams)} г, ${round(totals.kcal)} ккал`);
+  function assistantMessage(message, index, isLast) {
+    if (message.error) {
+      return h('div', { class: 'msg msg-assistant' },
+        h('div', { class: 'msg-text small', style: 'color:var(--over)' }, message.error.title),
+        message.error.hint ? h('div', { class: 'tiny faint' }, message.error.hint) : null,
+        h('div', { class: 'chips', style: 'margin-top:8px' },
+          h('button', {
+            class: 'btn btn-small', type: 'button', text: 'Повторить',
+            onclick: () => retry(index),
+          })));
+    }
+
+    // Вопрос показываем человеческим текстом: ответ на него продолжает тот же разбор.
+    const question = message.analysis?.question
+      ? h('div', { class: 'msg msg-question' }, h('div', { class: 'msg-text' }, message.analysis.question))
+      : null;
+
+    if (!message.analysis) return question;
+
+    // Разбора может ещё не быть: модель спросила, и считать пока нечего.
+    if (!message.analysis.items?.length) return question;
+
+    // Полная карточка с правкой позиций — у последнего разбора: прежние уже не правят.
+    if (isLast) {
+      return h('div', { class: 'msg msg-assistant' },
+        question,
+        createResultCard({
+          analysis: message.analysis,
+          items: message.analysis.items,
+          origin: 'chat',
+          onSave: null, // сохраняет кнопка на полосе: она видна всегда
+          onChange: (values) => {
+            state.current = values;
+            renderDraftBar();
+          },
+        }).element);
+    }
+
+    const totals = sumItems(message.analysis.items);
+    return h('div', { class: 'msg msg-assistant' },
+      question,
+      h('div', { class: 'msg-text small faint' },
+        `${message.analysis.dish} — ${round(totals.grams)} г, ${round(totals.kcal)} ккал`));
   }
 
   function renderThread() {
-    fill(thread, state.messages.map((message, index) => {
-      if (message.role === 'user') return userMessage(message.text, message.photo);
+    const lastIndex = state.messages.length - 1;
+    fill(thread, state.messages.map((message, index) => (message.role === 'user'
+      ? userMessage(message)
+      : assistantMessage(message, index, index === lastIndex))));
+  }
 
-      if (message.error) {
-        return h('div', { class: 'msg msg-assistant' },
-          h('div', { class: 'msg-text small', style: 'color:var(--over)' }, message.error.title),
-          message.error.hint ? h('div', { class: 'tiny faint' }, message.error.hint) : null,
-          h('div', { class: 'chips', style: 'margin-top:8px' },
-            h('button', {
-              class: 'btn btn-small', type: 'button', text: 'Повторить',
-              onclick: () => retry(index),
-            })));
-      }
-
-      const last = index === state.messages.length - 1;
-      if (!last) {
-        return h('div', { class: 'msg msg-assistant' }, summaryLine(message.analysis));
-      }
-
-      // Последний разбор — с правкой позиций, порцией и сохранением.
-      card = createResultCard({
-        analysis: message.analysis,
-        items: message.analysis.items,
-        origin: 'chat',
-        head: null,
-        retryLabel: null,
-        onRetry: null,
-        onSave: save,
-      });
-      return card.element;
-    }));
+  /** Полоса с текущим разбором: видна всё время, поэтому записать можно в любой момент. */
+  function renderDraftBar() {
+    if (!state.current) {
+      draftBar.hidden = true;
+      fill(draftBar);
+      return;
+    }
+    const { totals, portionNote } = state.current;
+    draftBar.hidden = false;
+    fill(draftBar,
+      h('div', { class: 'grow' },
+        h('div', { class: 'draft-name' }, state.draft?.dish || 'Без названия'),
+        h('div', { class: 'tiny faint' },
+          `${round(totals.grams)} г · ${round(totals.kcal)} ккал · Б ${round(totals.protein)}`
+          + ` · Ж ${round(totals.fat)} · У ${round(totals.carbs)}`
+          + (portionNote ? ` · ${portionNote}` : '')
+          + (state.cost ? ` · разговор ${state.cost.toFixed(5)} $` : ''))),
+      h('button', {
+        class: 'btn-primary draft-save', type: 'button', text: 'В дневник',
+        onclick: () => save(state.current),
+      }));
   }
 
   function renderComposer() {
@@ -114,7 +148,7 @@ export function openChatSheet({ date = null } = {}) {
 
     const input = h('textarea', {
       class: 'composer-input', rows: 2,
-      placeholder: state.photoPreview ? 'Добавьте словами, если нужно' : 'Что вы съели',
+      placeholder: state.current ? 'Уточните, если нужно' : 'Что вы съели',
       value: state.text,
       oninput: (event) => { state.text = event.target.value; },
     });
@@ -134,10 +168,6 @@ export function openChatSheet({ date = null } = {}) {
         ? h('p', { class: 'small', style: 'margin-top:8px;color:var(--over)' },
           'Ключ провайдера не заполнен: посчитать не получится. Заполните ключ в настройках.')
         : null,
-      // Числа можно ввести и руками — например, когда они списаны с упаковки.
-      h('p', { class: 'tiny faint', style: 'margin-top:8px' },
-        'Запись появится в дневнике только после подтверждения. Пока разбор не сохранён, '
-        + 'закрывать окно безопасно: в дневник ничего не попадёт.'),
       h('div', { class: 'chips', style: 'margin-top:8px' },
         h('button', {
           class: 'btn btn-small btn-ghost', type: 'button', text: 'Ввести числа вручную',
@@ -145,12 +175,19 @@ export function openChatSheet({ date = null } = {}) {
             sheet.close();
             openAddSheet({ date: targetDate });
           },
-        })));
+        })),
+      h('p', { class: 'tiny faint', style: 'margin-top:8px' },
+        'Разговор можно вести сколько нужно: блюдо попадает в дневник только по кнопке '
+        + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится.'));
   }
 
   function render() {
+    // Порядок важен: карточка в переписке сообщает текущие значения, и полоса
+    // строится уже по ним.
     renderThread();
+    renderDraftBar();
     renderComposer();
+    thread.scrollTop = thread.scrollHeight;
   }
 
   // --- шаги ---
@@ -168,6 +205,14 @@ export function openChatSheet({ date = null } = {}) {
     }
   }
 
+  /** Прежние сообщения словами: без них модель спрашивала бы одно и то же по кругу. */
+  function history() {
+    return state.messages.map((message) => ({
+      role: message.role,
+      text: message.text || message.analysis?.question || '',
+    }));
+  }
+
   async function send() {
     const text = state.text.trim();
     if (!text && !state.photo) {
@@ -179,25 +224,31 @@ export function openChatSheet({ date = null } = {}) {
       return;
     }
 
+    const photo = state.photo;
+    const before = history();
     state.messages.push({ role: 'user', text, photo: state.photoPreview });
     state.text = '';
-    const photo = state.photo;
     state.photo = null;
     state.photoPreview = null;
     render();
-    await ask({ text, photo });
+    await ask({ text, photo, history: before });
   }
 
-  /** Повторяет последний запрос: тот же текст и тот же разбор, что были до ошибки. */
+  /** Повторяет неудачный запрос: то же сообщение и тот же разговор до него. */
   async function retry(index) {
     const failed = state.messages[index];
-    const previous = state.messages[index - 1];
+    const before = history().slice(0, index);
+    const message = state.messages[index - 1];
     state.messages.splice(index, 1);
     render();
-    await ask({ text: previous?.text || '', photo: failed.photo ? { base64: failed.photo } : null });
+    await ask({
+      text: message?.text || '',
+      photo: failed.photo ? { base64: failed.photo } : null,
+      history: before,
+    });
   }
 
-  async function ask({ text, photo }) {
+  async function ask({ text, photo, history: past }) {
     state.busy = true;
     render();
 
@@ -215,6 +266,7 @@ export function openChatSheet({ date = null } = {}) {
         text,
         image: photo ? { base64: photo.base64, mime: photo.mime } : null,
         draft: state.draft,
+        history: past,
       });
     } catch (error) {
       result = { ok: false, error: describeError(error), usages: [] };
@@ -244,16 +296,31 @@ export function openChatSheet({ date = null } = {}) {
       return;
     }
 
-    state.draft = result.data;
+    // Пустой разбор не заменяет прежний: вопрос уточняет то, что уже посчитано.
+    if (result.data.items?.length) state.draft = result.data;
+    state.cost += cost;
+    // Модель спрашивает — показываем вопрос, а числа кладём на полосу: подробную карточку
+    // рядом с вопросом показывать было бы шумно. Если считать пока нечего, полоса молчит:
+    // нули на ней выглядели бы как посчитанное блюдо.
+    if (result.data.question && result.data.items?.length) {
+      state.current = {
+        items: result.data.items,
+        totals: sumItems(result.data.items),
+        factor: 1,
+        portion: 'all',
+        portionNote: '',
+      };
+    }
     state.messages.push({ role: 'assistant', analysis: { ...result.data, cost } });
     render();
-    // Разговор растёт вниз: последнее сообщение должно быть видно.
-    thread.scrollTop = thread.scrollHeight;
   }
 
-  async function save({ items, totals, portionNote }) {
+  async function save(values) {
     const analysis = state.draft;
-    if (!analysis) return;
+    if (!analysis || !values?.items?.length) {
+      toast('Пока нечего записывать');
+      return;
+    }
 
     let thumbId = null;
     const withPhoto = state.messages.find((message) => message.photo);
@@ -271,20 +338,20 @@ export function openChatSheet({ date = null } = {}) {
       date: targetDate,
       time: nowTime(),
       name: analysis.dish,
-      grams: round(totals.grams, 1),
-      kcal: round(totals.kcal, 1),
-      protein: round(totals.protein, 1),
-      fat: round(totals.fat, 1),
-      carbs: round(totals.carbs, 1),
+      grams: round(values.totals.grams, 1),
+      kcal: round(values.totals.kcal, 1),
+      protein: round(values.totals.protein, 1),
+      fat: round(values.totals.fat, 1),
+      carbs: round(values.totals.carbs, 1),
       comment: '',
       source: 'chat',
-      items,
+      items: values.items,
       thumbId,
       basis: analysis.basis,
       confidence: analysis.confidence,
       assumptions: analysis.assumptions,
-      portionNote,
-      cost: analysis.cost,
+      portionNote: values.portionNote,
+      cost: state.cost,
     });
 
     toast('Записано');

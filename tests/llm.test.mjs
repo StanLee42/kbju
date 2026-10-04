@@ -173,7 +173,8 @@ test('сообщение словами уходит одной строкой �
   assert.equal(result.ok, true);
   assert.equal(result.data.items.length, 2);
   assert.equal(provider.calls[0].image, null, 'снимка может не быть');
-  assert.equal(provider.calls[0].text, 'тарелка борща и два куска хлеба');
+  // Сообщение уходит помеченным: модель должна понимать, где её слова, а где человека.
+  assert.ok(provider.calls[0].text.includes('тарелка борща и два куска хлеба'));
   assert.equal(provider.calls[0].system, CHAT_SYSTEM_PROMPT);
 });
 
@@ -193,6 +194,59 @@ test('уточнение уходит вместе с текущим разбо�
   assert.equal(provider.calls[0].image, null);
 });
 
+test('вопрос без позиций — это ответ, а не ошибка', () => {
+  // Так бывает в начале разговора: человек сказал слишком мало, считать пока нечего.
+  const parsed = parseAnalysis(JSON.stringify({
+    dish: '', items: [], question: 'А что именно вы съели?',
+    confidence: 'low', assumptions: '',
+  }));
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.question, 'А что именно вы съели?');
+  assert.equal(parsed.data.items.length, 0);
+});
+
+test('ответ без вопроса оставляет поле пустым', () => {
+  const parsed = parseAnalysis(validAnswer);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.question, null);
+});
+
+test('уточняющий вопрос разбирается и обрезается', () => {
+  const withQuestion = JSON.stringify({
+    dish: 'Гречка с котлетой',
+    source: 'estimate',
+    basis: 'per_portion',
+    items: [{ name: 'Гречка', grams: 200, kcal: 220, protein: 8, fat: 2, carbs: 40 }],
+    question: '  Сколько примерно было гречки — граммов двести?  ',
+    confidence: 'low',
+    assumptions: 'Вес оценён.',
+  });
+  const parsed = parseAnalysis(withQuestion);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.question, 'Сколько примерно было гречки — граммов двести?');
+  // Разбор при вопросе всё равно приходит целиком: его видно, пока идёт разговор.
+  assert.equal(parsed.data.items.length, 1);
+});
+
+test('разговор до этого уходит модели целиком', async () => {
+  const provider = stubProvider([{ text: validAnswer }]);
+  await analyzeChat({
+    provider,
+    text: 'граммов двести',
+    draft: { dish: 'Гречка', items: [] },
+    history: [
+      { role: 'user', text: 'поел гречки с котлетой' },
+      { role: 'assistant', text: 'Сколько примерно было гречки?' },
+    ],
+  });
+
+  const message = provider.calls[0].text;
+  assert.ok(message.includes('Разговор до этого'), 'история должна быть передана');
+  assert.ok(message.includes('поел гречки с котлетой'));
+  assert.ok(message.includes('Сколько примерно было гречки?'), 'вопрос модели тоже в истории');
+  assert.ok(message.includes('Новое сообщение человека: граммов двести'));
+});
+
 test('уточнение со снимком отправляет и снимок, и слова', async () => {
   const provider = stubProvider([{ text: validAnswer }]);
   await analyzeChat({
@@ -209,8 +263,12 @@ test('уточнение со снимком отправляет и снимо�
 test('чат-промпт ставит слова человека выше снимка и запрещает начинать заново', () => {
   assert.notEqual(CHAT_SYSTEM_PROMPT, SYSTEM_PROMPT);
   assert.match(CHAT_SYSTEM_PROMPT, /слова человека важнее снимка/i);
-  assert.match(CHAT_SYSTEM_PROMPT, /Верни ИЗМЕНЁННЫЙ разбор целиком/);
+  assert.match(CHAT_SYSTEM_PROMPT, /верни ИЗМЕНЁННЫЙ/i);
   assert.match(CHAT_SYSTEM_PROMPT, /Не начинай заново/);
+  // Вопрос задаётся только тогда, когда меняет числа, и только один.
+  assert.match(CHAT_SYSTEM_PROMPT, /только тогда, когда ответ изменит числа/);
+  assert.match(CHAT_SYSTEM_PROMPT, /Спрашивай ОДНО/);
+  assert.match(CHAT_SYSTEM_PROMPT, /"question"/);
   // Схема ответа общая со снимком: разбирает её тот же код.
   assert.match(CHAT_SYSTEM_PROMPT, /"basis"/);
   assert.match(SYSTEM_PROMPT, /"basis"/);

@@ -84,13 +84,37 @@ export function parseAnalysis(text) {
     ? parsed.items
     : (parsed.items && typeof parsed.items === 'object' ? Object.values(parsed.items) : []);
 
-  if (!rawItems.length) return { ok: false, error: 'в ответе нет ни одной позиции' };
+  const question = String(parsed.question || '').trim() || null;
 
   const items = rawItems
     .map((item, index) => normalizeItem(item, index, warnings))
     .filter(Boolean);
 
-  if (!items.length) return { ok: false, error: 'все позиции оказались без веса или без названия' };
+  // Разговор может начаться с вопроса: человек сказал слишком мало, и считать нечего.
+  // Тогда вопрос и есть ответ, а разбора пока нет — это не ошибка ответа модели.
+  if (!items.length) {
+    if (question) {
+      return {
+        ok: true,
+        data: {
+          dish: String(parsed.dish || '').trim(),
+          source: SOURCES.has(parsed.source) ? parsed.source : 'estimate',
+          basis: BASES.has(parsed.basis) ? parsed.basis : 'per_portion',
+          packageWeight: null,
+          items: [],
+          totals: totalsOf([]),
+          question,
+          confidence: CONFIDENCE.has(parsed.confidence) ? parsed.confidence : 'low',
+          assumptions: String(parsed.assumptions || '').trim(),
+          warnings,
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: rawItems.length ? 'все позиции оказались без веса или без названия' : 'в ответе нет ни одной позиции',
+    };
+  }
 
   const source = SOURCES.has(parsed.source) ? parsed.source : 'estimate';
   if (!SOURCES.has(parsed.source)) warnings.push('источник не указан, считаем оценкой');
@@ -109,6 +133,8 @@ export function parseAnalysis(text) {
         : num(parsed.packageWeight) || null,
       items,
       totals: totalsOf(items),
+      // Уточняющий вопрос бывает только в разговоре; у снимка этого поля нет, и это нормально.
+      question,
       confidence: CONFIDENCE.has(parsed.confidence) ? parsed.confidence : 'low',
       assumptions: String(parsed.assumptions || '').trim(),
       warnings,

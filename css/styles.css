@@ -357,6 +357,34 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .attached { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .attached .msg-photo { width: 64px; height: 64px; margin: 0; }
 
+/* Полоса с текущим разбором: видна всё время разговора, поэтому записать можно в любой момент. */
+.draft-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev-2));
+}
+
+/* Скрытая полоса обязана быть скрытой: правило [hidden] слабее авторского display. */
+.draft-bar[hidden] { display: none; }
+
+/* Название блюда в одну строку: в полосе длинному названию не место. */
+.draft-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-save { width: auto; padding: 10px 14px; white-space: nowrap; }
+
+/* Уточняющий вопрос модели: отдельная реплика, чтобы его нельзя было пропустить. */
+.msg-question {
+  background: var(--bg-elev-2);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
 .composer-input { min-height: 52px; resize: vertical; }
 .composer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .composer-send { width: auto; padding: 12px 18px; }

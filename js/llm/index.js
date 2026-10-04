@@ -96,21 +96,34 @@ export async function analyzeFood({ provider, image = null, text = null }) {
 /**
  * Разбор сообщения в разговоре про еду: словами, снимком или тем и другим.
  *
- * `draft` — разбор, полученный раньше в этом же разговоре. Он уходит модели отдельным
- * блоком, чтобы уточнение («это половина») изменило тот же разбор, а не завело второй.
+ * `history` — прежние сообщения разговора, `draft` — текущий разбор. Оба уходят модели:
+ * без истории она спрашивала бы одно и то же по кругу, а без разбора не поняла бы,
+ * к чему относится уточнение «это половина».
  */
-export async function analyzeChat({ provider, text = null, image = null, draft = null }) {
-  const message = draft
-    ? `Текущий разбор этой еды (JSON):\n${JSON.stringify(draft)}\n\n`
-      + `Уточнение человека: ${text || '(только снимок, без слов)'}`
-    : (text || '(только снимок, без слов)');
+export async function analyzeChat({ provider, text = null, image = null, draft = null, history = [] }) {
+  const parts = [];
+
+  if (draft) {
+    parts.push(`Текущий разбор этой еды (JSON):\n${JSON.stringify(draft)}`);
+  }
+  // История идёт словами: у сообщения со снимком слов может и не быть, но и его помнить важно.
+  const transcript = (history || [])
+    .map((message) => {
+      const said = String(message.text || '').trim();
+      return `${message.role === 'user' ? 'Человек' : 'Ты'}: ${said || 'прислал снимок'}`;
+    })
+    .join('\n');
+  if (transcript) {
+    parts.push(`Разговор до этого:\n${transcript}`);
+  }
+  parts.push(`Новое сообщение человека: ${text || '(только снимок, без слов)'}`);
 
   return runWithRetry({
     provider,
     system: CHAT_SYSTEM_PROMPT,
     user: CHAT_USER_PROMPT,
     image,
-    text: message,
+    text: parts.join('\n\n'),
     parse: parseAnalysis,
   });
 }

@@ -33,12 +33,15 @@ function sourceLine(analysis, origin) {
  * @param {string} options.origin 'photo' | 'chat' — как подписывать источник чисел
  * @param {string} options.retryLabel как называется кнопка возврата к вводу
  * @param {Function} options.onRetry
- * @param {Function} options.onSave получает готовые к записи позиции, множитель и итог
+ * @param {Function|null} options.onSave получает готовые к записи позиции, множитель и итог;
+ *   если не передан, кнопки сохранения в карточке нет
+ * @param {Function} options.onChange сообщает текущие значения после каждой правки:
+ *   по ним показывается черновик, пока разговор продолжается
  * @returns {{element: Node}}
  */
 export function createResultCard({
   analysis, items, head = null, origin = 'photo',
-  retryLabel = 'Другой снимок', onRetry = null, onSave,
+  retryLabel = 'Другой снимок', onRetry = null, onSave, onChange = null,
 }) {
   const state = {
     items: (items || []).map((item) => ({ ...item })),
@@ -59,9 +62,23 @@ export function createResultCard({
   const scaledItems = () => scaleItems(state.items, factor());
   const scaledTotals = () => sumItems(scaledItems());
 
+  /** Текущие значения карточки: и для строки итогов, и для того, кто её показывает. */
+  function currentValues() {
+    const value = factor();
+    const totals = scaledTotals();
+    return {
+      items: scaledItems(),
+      totals,
+      factor: value,
+      portion: state.portion,
+      portionNote: portionNote({ portion: state.portion, factor: value, grams: totals.grams }),
+    };
+  }
+
   function renderTotals() {
     const totals = scaledTotals();
     const value = factor();
+    if (onChange) onChange(currentValues());
     fill(totalsNode, 
       h('div', {},
         h('b', { text: `${round(totals.kcal)} ккал` }),
@@ -142,28 +159,26 @@ export function createResultCard({
       analysis.assumptions
         ? h('p', { class: 'tiny faint', style: 'margin-top:10px' }, `Что учтено: ${analysis.assumptions}`)
         : null,
-      h('div', { class: 'chips', style: 'margin-top:16px' },
-        h('button', {
-          class: 'btn-primary', type: 'button', text: 'Сохранить в дневник',
-          onclick: () => {
-            if (!state.items.length) {
-              toast('Нет ни одной позиции');
-              return;
-            }
-            const value = factor();
-            const totals = scaledTotals();
-            onSave({
-              items: scaledItems(),
-              totals,
-              factor: value,
-              portion: state.portion,
-              portionNote: portionNote({ portion: state.portion, factor: value, grams: totals.grams }),
-            });
-          },
-        }),
-        onRetry
-          ? h('button', { class: 'btn btn-small', type: 'button', text: retryLabel, onclick: onRetry })
-          : null),
+      onSave || onRetry
+        ? h('div', { class: 'chips', style: 'margin-top:16px' },
+          // Кнопка сохранения показывается только тем, кто её просил: в разговоре
+          // сохраняет полоса с черновиком, и второй кнопки быть не должно.
+          onSave
+            ? h('button', {
+              class: 'btn-primary', type: 'button', text: 'Сохранить в дневник',
+              onclick: () => {
+                if (!state.items.length) {
+                  toast('Нет ни одной позиции');
+                  return;
+                }
+                onSave(currentValues());
+              },
+            })
+            : null,
+          onRetry
+            ? h('button', { class: 'btn btn-small', type: 'button', text: retryLabel, onclick: onRetry })
+            : null)
+        : null,
       h('p', { class: 'tiny faint', style: 'margin-top:8px' },
         `Стоимость этого разбора: ${(analysis.cost || 0).toFixed(5)} $ (оценка)`));
 
