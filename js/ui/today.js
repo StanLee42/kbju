@@ -1,9 +1,7 @@
 // Экран «Сегодня»: кольца, полоски, лента записей, переключатель типа дня.
 import { MACROS, byTimeAscending, dayTypeById, remaining, resolveDayTypeId } from '../norm.js';
 import { store, setDayTypeOverride, subscribe } from '../state.js';
-import {
-  formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull,
-} from '../util.js';
+import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull } from '../util.js';
 import { createBar } from './components/bar.js';
 import { createRing } from './components/ring.js';
 import { openAddSheet } from './add.js';
@@ -63,7 +61,7 @@ export function mount(container) {
   function renderSwitch() {
     const { settings, date } = store;
     const activeId = resolveDayTypeId(date, settings);
-    switchRow.replaceChildren(...(settings.dayTypes || []).map((type) => h('button', {
+    fill(switchRow, ...(settings.dayTypes || []).map((type) => h('button', {
       type: 'button',
       text: type.name,
       'aria-pressed': String(type.id === activeId),
@@ -74,13 +72,13 @@ export function mount(container) {
   function renderFeed() {
     const entries = byTimeAscending(store.entries);
     if (!entries.length) {
-      feed.replaceChildren(h('div', { class: 'empty' },
+      fill(feed, h('div', { class: 'empty' },
         'Пока пусто. Нажмите «Записать», чтобы добавить еду.'));
       totalLine.textContent = '';
       return;
     }
 
-    feed.replaceChildren(...entries.map((entry) => {
+    fill(feed, ...entries.map((entry) => {
       const portion = PORTION_LABEL[entry.portion] || '';
       const sub = [entry.grams ? `${round(entry.grams)} г` : '', portion, entry.portionNote]
         .filter(Boolean).join(' · ');
@@ -149,7 +147,7 @@ export function mount(container) {
 
     if (store.entries.length) {
       const entriesWord = plural(store.entries.length, 'запись', 'записи', 'записей');
-      totalLine.replaceChildren(
+      fill(totalLine, 
         h('span', { class: 'muted', text: `Итого за день · ${store.entries.length} ${entriesWord}` }),
         h('span', {},
           h('b', { text: `${round(totals.kcal)} ккал` }),

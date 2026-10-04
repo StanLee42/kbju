@@ -117,7 +117,12 @@ const state = () => evaluate(`JSON.stringify({
   текст: document.querySelector('.sheet')?.innerText?.slice(0, 700) || '',
   расшифровка: document.querySelector('textarea.transcript')?.value ?? null,
   ошибка: Boolean(document.querySelector('#view')?.dataset.errorShown),
-  версия: document.querySelector('#view')?.innerText?.includes('версия на сервере') || false
+  версия: document.querySelector('#view')?.innerText?.includes('версия на сервере') || false,
+  // Пустое место в разметке превращается в текстовый узел «null» и попадает на экран.
+  мусор: ['null', 'undefined', 'NaN']
+    .filter((word) => new RegExp('(^|\\\\s)' + word + '($|\\\\s)')
+      .test(document.querySelector('.sheet')?.innerText || ''))
+    .join(', ')
 })`);
 
 await send('Runtime.enable');
@@ -135,15 +140,20 @@ if (offlineRun) {
   });
   console.log('сеть выключена, кэш оставлен прогретым');
 } else {
-  // Чистим кэш приложения и снимаем service worker: проверять надо текущую сборку.
-  await evaluate(`(async () => {
-    for (const key of await caches.keys()) await caches.delete(key);
+  // Чистим только кэш приложения: кэш моделей и библиотеки оставляем, иначе каждая
+  // проверка тянула бы сотни мегабайт заново. Их проверяет стенд загрузки.
+  console.log(`оставлено в кэше: ${await evaluate(`(async () => {
+    const keep = ['transformers-cache', 'kbju-library-v1'];
+    const kept = [];
+    for (const key of await caches.keys()) {
+      if (keep.includes(key)) { kept.push(key); continue; }
+      await caches.delete(key);
+    }
     for (const registration of await navigator.serviceWorker?.getRegistrations?.() || []) {
       await registration.unregister();
     }
-    return 'ok';
-  })()`);
-  console.log(`кэши перед прогоном: ${await evaluate('(async () => (await caches.keys()).join(", "))()')}`);
+    return kept.join(', ') || 'ничего';
+  })()`)}`);
 }
 
 await send('Page.reload', { ignoreCache: false });
@@ -175,6 +185,7 @@ let transcript = null;
 while (Date.now() - started < timeoutMs) {
   await wait(1500);
   const now = JSON.parse(await state());
+  if (now.мусор) problems.push(`на экране распознавания служебное слово: ${now.мусор}`);
   if (now.ошибка) {
     problems.push(`на экране ошибка: ${now.текст.slice(0, 200).replace(/\n/g, ' ')}`);
     break;
@@ -203,6 +214,38 @@ if (transcript !== null) {
   if (hit < Math.ceil(want.length / 2)) {
     problems.push(`слишком мало совпавших слов: ${hit} из ${want.length}`);
   }
+}
+
+// Вторая запись подряд: модель уже подготовлена, и готовить её заново не должны —
+// иначе человек ждёт её второй раз и видит, будто она снова скачивается.
+if (transcript !== null) {
+  console.log(`\nвторая запись: ${await tapText('Записать снова')}`);
+  await wait(1500);
+  await tapText('Готово');
+
+  const secondStarted = Date.now();
+  let secondTranscript = null;
+  let preparedAgain = false;
+  while (Date.now() - secondStarted < timeoutMs) {
+    await wait(400);
+    const now = JSON.parse(await state());
+    if (now.текст.includes('Готовлю модель')) preparedAgain = true;
+    if (now.ошибка) { problems.push('на второй записи ошибка'); break; }
+    if (now.расшифровка !== null) { secondTranscript = now.расшифровка; break; }
+  }
+
+  const secondSeconds = (Date.now() - secondStarted) / 1000;
+  console.log(`вторая расшифровка за ${secondSeconds.toFixed(1)} с: «${secondTranscript}»`);
+  const finalState = JSON.parse(await state());
+  const facts = (finalState.текст || '')
+    .split('\n').find((line) => line.includes(' с на ')) || 'строки с числами нет';
+  console.log(`на экране: ${facts}`);
+  if (finalState.мусор) problems.push(`на экране после второй записи служебное слово: ${finalState.мусор}`);
+
+  if (preparedAgain) {
+    problems.push('на второй записи модель готовилась заново — её держат подготовленной');
+  }
+  if (secondTranscript === null) problems.push('вторая расшифровка не появилась');
 }
 
 console.log(problems.length

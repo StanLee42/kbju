@@ -4,7 +4,7 @@ import { createProvider, analyzeFood, describeError } from '../llm/index.js';
 import { pickImage, prepareForApi, makeThumbnail } from '../media/image.js';
 import { addEntry, saveThumb, store } from '../state.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
-import { h, nowTime, round } from '../util.js';
+import { fill, h, nowTime, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
 import { createResultCard } from './result-card.js';
 
@@ -31,7 +31,7 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
   // --- шаг 1: выбор снимка ---
 
   function renderChooser() {
-    host.replaceChildren(
+    fill(host, 
       h('p', { class: 'small muted' },
         'Снимите тарелку или упаковку. Лучше всего работает таблица пищевой ценности на упаковке: '
         + 'с неё значения берутся точно. По тарелке модель оценивает состав и вес на глаз.'),
@@ -143,7 +143,7 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
         onSave: save,
       });
     }
-    host.replaceChildren(state.card.element);
+    fill(host, state.card.element);
   }
 
   async function save({ items, totals, portionNote: note }) {
@@ -184,7 +184,7 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
   // --- предпросмотр перед отправкой ---
 
   function renderPreview() {
-    host.replaceChildren(
+    fill(host, 
       h('img', {
         src: `data:${state.preview.mime};base64,${state.preview.base64}`,
         alt: 'снимок',
@@ -218,7 +218,7 @@ export function openPhotoSheet({ date = null, entry = null } = {}) {
   }
 
   function renderError() {
-    host.replaceChildren(
+    fill(host, 
       h('div', { class: 'card', style: 'border-color:var(--over)' },
         h('h3', { class: 'card-title', style: 'color:var(--over)' }, state.error.title || 'Не получилось'),
         h('p', { class: 'small muted' }, state.error.hint || ''),

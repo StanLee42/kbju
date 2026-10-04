@@ -4,7 +4,7 @@
 // Живёт отдельно, потому что иначе правки в ней пришлось бы повторять в двух местах,
 // а расхождение между фото и голосом в дневнике выглядело бы как ошибка.
 import { PORTION_PRESETS, portionFactor, portionNote, scaleItems, sumItems } from '../portion.js';
-import { h, num, round } from '../util.js';
+import { fill, h, num, round } from '../util.js';
 import { loadThumb } from '../state.js';
 import { openSheet, toast } from './components/sheet.js';
 
@@ -62,7 +62,7 @@ export function createResultCard({
   function renderTotals() {
     const totals = scaledTotals();
     const value = factor();
-    totalsNode.replaceChildren(
+    fill(totalsNode, 
       h('div', {},
         h('b', { text: `${round(totals.kcal)} ккал` }),
         ` · Б ${round(totals.protein)} · Ж ${round(totals.fat)} · У ${round(totals.carbs)}`),
@@ -129,7 +129,7 @@ export function createResultCard({
         }))
       : null;
 
-    body.replaceChildren(
+    fill(body, 
       h('div', { class: 'small' },
         h('b', { text: analysis.dish }),
         h('div', { class: 'tiny faint', style: 'margin-top:2px' }, sourceLine(analysis, origin))),

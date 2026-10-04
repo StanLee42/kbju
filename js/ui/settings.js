@@ -7,7 +7,7 @@ import { pickImage, prepareForApi } from '../media/image.js';
 import { normsFromMeasurement, dayTypeById, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
-import { bytesHuman, h, num, todayISO } from '../util.js';
+import { bytesHuman, fill, h, num, todayISO } from '../util.js';
 import { toast } from './components/sheet.js';
 
 const WEEK_KEYS = [
@@ -164,8 +164,8 @@ export function mount(container) {
       value: id, text: id === 'deepseek' ? 'DeepSeek' : id, selected: (provider.id || 'deepseek') === id,
     })));
 
-    // Внимание: replaceChildren превращает null в текстовый узел «null»,
-    // поэтому пустые элементы отсеиваем заранее.
+    // Пустые места собираем списком: заполнение контейнера отсеивает null само,
+    // но так виднее, что именно попадает на экран, а что пропущено.
     const nodes = [];
 
     if (AVAILABLE_PROVIDERS.length > 1) {
@@ -200,7 +200,7 @@ export function mount(container) {
       'Ключ хранится только на устройстве: он не попадает ни в выгрузку дневника, '
       + 'ни в публикацию приложения. Проверка ключа бесплатна — она спрашивает только баланс.'));
 
-    providerHost.replaceChildren(...nodes);
+    fill(providerHost, ...nodes);
   }
 
   async function checkKey() {
@@ -277,7 +277,7 @@ export function mount(container) {
       + 'столько скачает телефон при первом распознавании. Дальше модель остаётся в памяти, '
       + 'и повторная загрузка занимает меньше секунды.'));
 
-    voiceHost.replaceChildren(...nodes);
+    fill(voiceHost, ...nodes);
   }
 
   // Проверка ускорения — асинхронная: пока она идёт, раздел показывает «проверяем…».
@@ -416,7 +416,7 @@ export function mount(container) {
       }
     }
 
-    reportHost.replaceChildren(...parts);
+    fill(reportHost, ...parts);
   }
 
   async function pickReport() {
@@ -515,7 +515,7 @@ export function mount(container) {
         onchange: (event) => patch(key, Number(event.target.value) || 0),
       }));
 
-    pricesHost.replaceChildren(
+    fill(pricesHost, 
       h('div', { class: 'grid-2' },
         field('inputCacheMiss', 'Вход, промах'),
         field('inputCacheHit', 'Вход, кэш')),
@@ -546,7 +546,7 @@ export function mount(container) {
 
   function renderDayTypes() {
     const types = store.settings.dayTypes || [];
-    dayTypesHost.replaceChildren(...types.map((type, index) => h('div', {
+    fill(dayTypesHost, ...types.map((type, index) => h('div', {
       style: 'padding:10px 0;border-bottom:1px solid var(--line)',
     },
     h('input', {
@@ -576,7 +576,7 @@ export function mount(container) {
     const { schedule } = store.settings;
     const isCycle = schedule.mode === 'cycle';
 
-    scheduleModeRow.replaceChildren(...[
+    fill(scheduleModeRow, ...[
       ['week', 'По дням недели'],
       ['cycle', 'По циклу'],
     ].map(([mode, label]) => h('button', {
@@ -592,7 +592,7 @@ export function mount(container) {
     cycleHost.hidden = !isCycle;
 
     if (!isCycle) {
-      weekHost.replaceChildren(...WEEK_KEYS.map(([key, label]) => h('label', {
+      fill(weekHost, ...WEEK_KEYS.map(([key, label]) => h('label', {
         class: 'row-between', style: 'padding:7px 0',
       },
       h('span', { class: 'small', text: label }),
@@ -609,7 +609,7 @@ export function mount(container) {
       const { length = 2, trainPositions = [], startDate } = schedule.cycle || {};
       const positions = Array.from({ length }, (_, i) => i + 1);
 
-      cycleHost.replaceChildren(
+      fill(cycleHost, 
         h('label', { class: 'field' },
           h('span', { class: 'field-label', text: 'Длина цикла, дней' }),
           h('input', {
@@ -674,7 +674,7 @@ export function mount(container) {
       value: type.id, text: type.name,
     })));
 
-    exceptionsHost.replaceChildren(
+    fill(exceptionsHost, 
       dates.length
         ? h('div', {}, dates.map((date) => h('div', {
           class: 'row-between', style: 'padding:7px 0;border-bottom:1px solid var(--line)',
@@ -751,7 +751,7 @@ export function mount(container) {
     });
     parts.push(h('div', { class: 'chips', style: 'margin-top:10px' }, wipeButton));
 
-    storageHost.replaceChildren(...parts);
+    fill(storageHost, ...parts);
   }
 
   // --- цель и темп ---

@@ -13,13 +13,37 @@ import {
 import { analyzeSpoken, createProvider, describeError } from '../llm/index.js';
 import { addEntry, store } from '../state.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
-import { bytesHuman, h, nowTime, round } from '../util.js';
+import { bytesHuman, fill, h, nowTime, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
 import { openAddSheet } from './add.js';
 import { createResultCard } from './result-card.js';
 
 /** Длиннее не нужно: фраза про еду занимает секунды, а окно модели — 30 секунд звука. */
 const MAX_SECONDS = 30;
+
+/**
+ * Сколько молчания в подготовке модели считаем застоем.
+ *
+ * Такое уже случалось: файл модели не отдавался, новостей о ходе не было, и приложение
+ * молча висело на «Готовлю модель». Человек в этот момент не знает, работает оно или нет,
+ * поэтому через полминуты тишины честно говорим об этом и предлагаем другой способ ввода.
+ */
+const STALL_MS = 30000;
+
+/**
+ * Подготовленная модель переживает закрытие шторки.
+ *
+ * Подготовка — это не только скачивание: модель нужно разложить в память и собрать
+ * вычислительный граф, и на телефоне без ускорения это занимает секунды. Держим её
+ * готовой, чтобы вторая запись начиналась сразу. Плата — занятая память, пока открыто
+ * приложение; если модель понадобится другая, прежнюю закрываем.
+ */
+let warm = null;
+
+function dropWarmRecognizer() {
+  warm?.recognizer.close();
+  warm = null;
+}
 
 export function openVoiceSheet({ date = null } = {}) {
   const settings = store.settings || {};
@@ -30,36 +54,60 @@ export function openVoiceSheet({ date = null } = {}) {
     step: 'idle', // idle | recording | recognizing | transcript | analyzing | result | error
     seconds: 0,
     duration: 0,
+    recognizeSeconds: null,
     transcript: '',
     analysis: null,
     error: null,
     card: null,
     model: null,
     modelNote: '',
+    acceleration: null,
+    stalled: false,
   };
 
   let recorder = null;
-  let recognizer = null;
   let ticker = null;
+  let watchdog = null;
   let startedAt = 0;
   let levelNode = null;
   let timeNode = null;
   let statusNode = null;
+  let closed = false;
 
   const host = h('div', {});
   const sheet = openSheet({ title: 'Еда голосом', content: host, onClose: cleanup });
 
   function cleanup() {
+    closed = true;
     stopTicker();
+    stopWatchdog();
+    // Микрофон отпускаем всегда: держать его открытым между записями незачем.
+    // А подготовленную модель, наоборот, оставляем — она понадобится следующей записи.
     recorder?.cancel();
     recorder = null;
-    recognizer?.close();
-    recognizer = null;
   }
 
   function stopTicker() {
     if (ticker) clearInterval(ticker);
     ticker = null;
+  }
+
+  // --- сторож застоя в подготовке модели ---
+
+  function stopWatchdog() {
+    if (watchdog) clearTimeout(watchdog);
+    watchdog = null;
+  }
+
+  /** Отмечает, что подготовка идёт: пока приходят новости, сторожить нечего. */
+  function noteActivity() {
+    stopWatchdog();
+    watchdog = setTimeout(() => {
+      watchdog = null;
+      if (closed) return;
+      state.stalled = true;
+      if (state.step === 'recognizing') render();
+    }, STALL_MS);
   }
 
   // --- запись ---
@@ -130,10 +178,16 @@ export function openVoiceSheet({ date = null } = {}) {
 
   // --- распознавание на устройстве ---
 
-  /** Готовит распознаватель: модель скачивается один раз и остаётся в кэше браузера. */
+  /**
+   * Готовит распознаватель.
+   *
+   * Модель скачивается один раз, но подготовка — это ещё и сборка вычислительного графа,
+   * которая на телефоне без ускорения занимает секунды. Поэтому готовый распознаватель
+   * остаётся жить между записями: вторая запись начинается сразу, без ожидания.
+   */
   async function prepareRecognizer() {
-    if (recognizer) return recognizer;
     const acceleration = await detectAcceleration();
+    state.acceleration = acceleration;
     const offered = availableConfigs(acceleration);
     // Модель выбирается в настройках. Если выбранной там сборки на этом устройстве
     // нет (например, включили ускорение, а видеокарта не работает) — берём среднюю.
@@ -142,31 +196,47 @@ export function openVoiceSheet({ date = null } = {}) {
       || pickDefaultConfig(acceleration);
     state.model = config;
 
-    recognizer = createRecognizer({
+    if (warm?.configId === config.id) {
+      // Эта модель уже подготовлена прошлой записью — ждать нечего.
+      return warm.recognizer;
+    }
+    dropWarmRecognizer();
+
+    const recognizer = createRecognizer({
       onProgress: (progress) => {
-        // Полоску обновляем на месте: перерисовка всего экрана на каждое сообщение
-        // о загрузке съедала бы больше, чем сама загрузка.
+        // Строку обновляем на месте: перерисовка всего экрана на каждое сообщение
+        // о готовности модели съедала бы больше, чем сама подготовка.
+        noteActivity();
         if (!statusNode) return;
-        statusNode.textContent = `Скачиваю модель: ${progress.percent}%`
+        statusNode.textContent = `Готовлю модель: ${progress.percent}%`
           + (progress.total ? ` (${bytesHuman(progress.loaded)} из ${bytesHuman(progress.total)})` : '');
       },
     });
 
-    const answer = await recognizer.load(config);
-    if (answer?.fallback) {
-      state.modelNote = 'Ускорение видеокартой не заработало — считаю без него.';
+    noteActivity();
+    try {
+      const answer = await recognizer.load(config);
+      if (answer?.fallback) {
+        state.modelNote = 'Ускорение видеокартой не заработало — считаю без него.';
+      }
+    } catch (error) {
+      stopWatchdog();
+      recognizer.close();
+      throw error;
     }
+    stopWatchdog();
+
+    // Запоминаем именно ту сборку, которая заработала: после отката без ускорения
+    // это двойник, и в следующий раз готовить нужно уже его.
+    warm = { configId: recognizer.configId || config.id, recognizer };
     return recognizer;
   }
 
   async function recognize(samples) {
+    let recognizer;
     try {
-      await prepareRecognizer();
+      recognizer = await prepareRecognizer();
     } catch (error) {
-      // Поток с неудачной загрузкой закрываем: со сломанным распознавателем
-      // повторная попытка обречена, а так следующий раз начнётся заново.
-      recognizer?.close();
-      recognizer = null;
       throw {
         title: error?.title || 'Модель распознавания не загрузилась',
         hint: 'Проверьте интернет и попробуйте снова. Можно выбрать модель поменьше в настройках.',
@@ -176,8 +246,12 @@ export function openVoiceSheet({ date = null } = {}) {
 
     try {
       const result = await recognizer.recognize(samples);
+      state.recognizeSeconds = result.seconds ?? null;
       return String(result.text || '').trim();
     } catch (error) {
+      // Если счёт упал, держать этот распознаватель смысла нет: следующая попытка
+      // должна начинаться с чистой подготовки, а не биться в то же место.
+      if (warm?.recognizer === recognizer) dropWarmRecognizer();
       throw {
         title: error?.title || 'Распознавание не получилось',
         hint: 'Попробуйте записать ещё раз — ближе к микрофону и без лишнего шума.',
@@ -274,7 +348,7 @@ export function openVoiceSheet({ date = null } = {}) {
   function renderIdle() {
     const keyMissing = !providerConfig.key;
     statusNode = null;
-    host.replaceChildren(
+    fill(host, 
       h('p', { class: 'small muted' },
         'Скажите, что съели: «съел двести граммов куриной грудки и порцию гречки». '
         + 'Речь распознаётся на телефоне, наружу уйдёт только текст.'),
@@ -302,7 +376,7 @@ export function openVoiceSheet({ date = null } = {}) {
     timeNode = h('div', { class: 'timer', text: '0,0 с' });
     levelNode = h('div', { class: 'level-fill' });
 
-    host.replaceChildren(
+    fill(host, 
       h('p', { class: 'small muted' }, 'Говорите. Когда закончите — нажмите «Готово».'),
       h('div', { class: 'rec-row' },
         h('div', { class: 'level' }, levelNode),
@@ -328,15 +402,35 @@ export function openVoiceSheet({ date = null } = {}) {
   function renderRecognizing() {
     const seconds = state.duration ? `${state.duration.toFixed(1).replace('.', ',')} с` : '';
     statusNode = h('p', { class: 'small muted' }, 'Готовлю распознавание…');
-    host.replaceChildren(
+    fill(host, 
       h('p', { class: 'small' }, `Записано ${seconds}. Распознаю на телефоне.`),
       h('div', { class: 'rec-row' },
         h('div', { class: 'level' }, h('div', { class: 'level-fill level-wait' })),
         h('div', { class: 'timer', text: '…' })),
       statusNode,
+      // Про скачивание говорим только тогда, когда его действительно предстоит:
+      // подготовленная модель со второй записи уже лежит в памяти, и ждать нечего.
+      warm ? null : h('p', { class: 'tiny faint' },
+        `Первый раз модель скачивается${state.model?.sizeMb ? ` (${state.model.sizeMb} МБ)` : ''} `
+        + 'и собирается в память — это самая долгая часть. Дальше она готова сразу.'),
+      state.stalled
+        ? h('p', { class: 'small', style: 'margin-top:8px;color:var(--over)' },
+          'Модель не загружается: новостей нет уже полминуты. Проверьте интернет — '
+          + 'или введите запись вручную, распознавание подождёт.')
+        : null,
+      state.stalled
+        ? h('div', { class: 'chips', style: 'margin-top:10px' },
+          h('button', {
+            class: 'btn', type: 'button', text: 'Ввести вручную',
+            onclick: () => {
+              sheet.close();
+              openAddSheet({ date: targetDate });
+            },
+          }))
+        : null,
       state.modelNote ? h('p', { class: 'tiny faint' }, state.modelNote) : null,
       h('p', { class: 'tiny faint', style: 'margin-top:10px' },
-        'На слабом телефоне это может занять до полуминуты. Звук остаётся на устройстве.'));
+        'Звук остаётся на устройстве: считается на телефоне, наружу уходит только текст.'));
   }
 
   function renderTranscript() {
@@ -346,10 +440,28 @@ export function openVoiceSheet({ date = null } = {}) {
       oninput: (event) => { state.transcript = event.target.value; },
     });
 
-    host.replaceChildren(
+    // Показываем, чем именно считали и сколько это заняло: по этим числам видно,
+    // стоит ли брать модель поменьше, и понятно, почему пришлось подождать.
+    const facts = [
+      state.model ? state.model.label.toLowerCase() : null,
+      state.recognizeSeconds !== null && state.duration
+        ? `${state.recognizeSeconds.toFixed(1).replace('.', ',')} с на ${state.duration.toFixed(1).replace('.', ',')} с записи`
+        : null,
+    ].filter(Boolean).join(' · ');
+
+    const slowWithoutAcceleration = state.acceleration && !state.acceleration.webgpu
+      && (state.recognizeSeconds || 0) > 5;
+
+    fill(host, 
       h('p', { class: 'small muted' }, 'Вот что расслышали. Поправьте, если что-то не так, — '
         + 'дальше считаются именно эти слова.'),
       input,
+      facts ? h('p', { class: 'tiny faint', style: 'margin-top:6px' }, facts) : null,
+      slowWithoutAcceleration
+        ? h('p', { class: 'tiny faint', style: 'margin-top:6px;color:var(--over)' },
+          'Телефон считает на процессоре, поэтому медленно. В настройках можно взять модель '
+          + 'поменьше — она узнаёт чуть хуже, зато считает быстрее.')
+        : null,
       state.modelNote ? h('p', { class: 'tiny faint' }, state.modelNote) : null,
       h('div', { class: 'chips', style: 'margin-top:14px' },
         h('button', { class: 'btn-primary', type: 'button', text: 'Посчитать КБЖУ', onclick: analyze }),
@@ -360,7 +472,7 @@ export function openVoiceSheet({ date = null } = {}) {
 
   function renderAnalyzing() {
     statusNode = null;
-    host.replaceChildren(
+    fill(host, 
       h('p', { class: 'small' }, 'Считаю КБЖУ по сказанному…'),
       h('p', { class: 'tiny faint', style: 'margin-top:8px' },
         `«${state.transcript.trim()}»`),
@@ -388,13 +500,13 @@ export function openVoiceSheet({ date = null } = {}) {
         onSave: save,
       });
     }
-    host.replaceChildren(state.card.element);
+    fill(host, state.card.element);
   }
 
   function renderError() {
     statusNode = null;
     const error = state.error || { title: 'Не получилось', hint: '', details: '' };
-    host.replaceChildren(
+    fill(host, 
       h('div', { class: 'card', style: 'border-color:var(--over)' },
         h('h3', { class: 'card-title', style: 'color:var(--over)' }, error.title),
         error.hint ? h('p', { class: 'small muted' }, error.hint) : null,
@@ -429,6 +541,8 @@ export function openVoiceSheet({ date = null } = {}) {
   }
 
   function render() {
+    // Распознавание может закончиться уже после закрытия шторки: рисовать тогда некуда.
+    if (closed) return;
     if (state.step === 'recording') { renderRecording(); return; }
     if (state.step === 'recognizing') { renderRecognizing(); return; }
     if (state.step === 'transcript') { renderTranscript(); return; }
