@@ -76,6 +76,24 @@ export function mount(container) {
     const line = h('p', { class: 'tiny faint center' },
       'версия приложения: определяем… (строка обновляется при каждой сборке)');
 
+    // Установленное приложение обновляется само при перезапуске, но своей кнопки
+    // обновления у него нет — браузер её не показывает. Эта кнопка проверяет
+    // обновление и перезагружает страницу, чтобы новая сборка подхватилась сразу.
+    const refresh = h('button', {
+      class: 'btn btn-small', type: 'button', text: 'Обновить приложение',
+      onclick: async () => {
+        toast('Проверяем обновление…');
+        try {
+          const registration = await navigator.serviceWorker?.getRegistration?.();
+          if (registration) await registration.update();
+        } catch {
+          // Даже если проверка не удалась, перезагрузка полезна: она берёт
+          // файлы из сети, если они там новее.
+        }
+        setTimeout(() => location.reload(), 400);
+      },
+    });
+
     fetch('./version.txt', { cache: 'no-store' })
       .then((response) => (response.ok ? response.text() : Promise.reject(new Error('нет файла версии'))))
       .then((text) => {
@@ -96,7 +114,12 @@ export function mount(container) {
         line.textContent = 'версия приложения: сборка для разработки';
       });
 
-    return line;
+    return h('div', {},
+      line,
+      h('div', { class: 'chips', style: 'justify-content:center;margin-top:6px' }, refresh),
+      h('p', { class: 'tiny faint center', style: 'margin-top:6px' },
+        'Приложение обновляется само, когда вы закрываете и открываете иконку. '
+        + 'Эта кнопка проверяет обновление вручную и перезагружает приложение.'));
   }
 
   let keyCheck = null;
