@@ -112,6 +112,7 @@ node tools/make-icons.mjs         # перегенерировать PNG-ико�
 node tools/cdp-check.mjs http://127.0.0.1:8765/#/today      # отрисовка и ошибки консоли
 node tools/cdp-flow.mjs                                     # запись еды и перезагрузка
 node tools/cdp-e2e.mjs                                      # ключ, отчёт, нормы, расход, экран дня
+node tools/cdp-layout.mjs                                   # вёрстка на экранах 320–430px
 node tools/spike-deepseek.mjs --limit 2                     # прогон снимков через модель
 ```
 

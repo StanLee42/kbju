@@ -43,6 +43,9 @@ html, body {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  /* Страховка от горизонтальной прокрутки: любая случайно широкая строка
+     не должна сдвигать всё приложение вправо. */
+  overflow-x: hidden;
 }
 
 body {
@@ -122,21 +125,42 @@ h1 {
 
 /* ---------- Кольца ---------- */
 
+/* Кольца задаются долями, а не фиксированной шириной: иначе на узком телефоне
+   строка не влезает, Chrome расширяет область вёрстки, и правый край вместе
+   с нижним меню уезжает за пределы экрана. */
 .rings {
   display: grid;
-  grid-template-columns: 168px 1fr;
-  gap: 12px;
+  grid-template-columns: minmax(84px, 168px) minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
 }
 
 .rings-small {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
+  min-width: 0;
 }
 
-.ring-wrap { position: relative; display: grid; place-items: center; }
-.ring-wrap svg { display: block; }
+/* Ширина задана явно: без неё контейнер сжимается по содержимому,
+   и процентная ширина внутри него не работает. */
+.ring-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.ring-wrap svg { display: block; width: 100%; height: auto; max-width: 168px; }
+.ring-mini svg { max-width: 78px; }
+
+/* На узких телефонах кольцам тесно в одну строку: большое кольцо сверху,
+   три малых под ним. */
+@media (max-width: 380px) {
+  .rings { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .rings-small { width: 100%; }
+}
 
 .ring-center {
   position: absolute;
@@ -148,14 +172,14 @@ h1 {
 }
 
 .ring-value {
-  font-size: 26px;
+  font-size: clamp(17px, 6.4vw, 26px);
   font-weight: 700;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
 }
 
-.ring-mini .ring-value { font-size: 14px; font-weight: 650; }
-.ring-meta { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+.ring-mini .ring-value { font-size: clamp(11px, 3.6vw, 14px); font-weight: 650; }
+.ring-meta { font-size: clamp(9px, 2.8vw, 11px); color: var(--text-faint); margin-top: 2px; }
 
 /* ---------- Полоски ---------- */
 
