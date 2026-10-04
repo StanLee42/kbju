@@ -10,11 +10,43 @@
 //
 // Сырые ответы модели складываются в spike/out — по ним потом правится промпт.
 import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'https://api.deepseek.com/chat/completions';
+
+// Node на этой машине не доверяет сертификатам: его встроенное хранилище корней пустое,
+// а браузера это не касается. Поэтому при первом запуске выгружаем системные корни macOS
+// и перезапускаем себя же с переменной NODE_EXTRA_CA_CERTS. Без этого запрос падает
+// с ошибкой UNABLE_TO_GET_ISSUER_CERT_LOCALLY.
+if (!process.env.NODE_EXTRA_CA_CERTS && !process.env.KBJU_CA_RETRY && process.platform === 'darwin') {
+  const { execFileSync } = await import('node:child_process');
+  const bundlePath = '/tmp/kbju-macos-roots.pem';
+  const parts = [];
+  for (const keychain of [
+    '/System/Library/Keychains/SystemRootCertificates.keychain',
+    '/Library/Keychains/System.keychain',
+  ]) {
+    try {
+      parts.push(execFileSync('security', ['find-certificate', '-a', '-p', keychain], { encoding: 'utf8' }));
+    } catch {
+      // Недоступная связка — не повод останавливаться.
+    }
+  }
+  if (parts.join('').includes('BEGIN CERTIFICATE')) {
+    await writeFile(bundlePath, parts.join(''), 'utf8');
+    const exitCode = await new Promise((resolveExit) => {
+      const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+        stdio: 'inherit',
+        env: { ...process.env, NODE_EXTRA_CA_CERTS: bundlePath, KBJU_CA_RETRY: '1' },
+      });
+      child.on('exit', (code) => resolveExit(code ?? 0));
+    });
+    process.exit(exitCode);
+  }
+}
 
 // Тариф на момент проверки. Это предположение, а не факт: перед выводами
 // о деньгах цены нужно сверить на странице тарифов DeepSeek.
