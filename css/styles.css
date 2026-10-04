@@ -381,6 +381,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   justify-content: center;
 }
 
+/* Скрытая шторка обязана быть действительно скрытой. Браузерное правило
+   [hidden] { display: none } слабее авторских стилей, поэтому без этой строки
+   пустая шторка оставалась растянутой на весь экран и перехватывала все нажатия:
+   приложение выглядело рабочим, но не реагировало ни на одно касание. */
+.sheet-root[hidden] { display: none; }
+
 .sheet-backdrop {
   position: absolute;
   inset: 0;

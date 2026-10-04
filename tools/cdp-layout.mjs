@@ -157,19 +157,35 @@ for (const width of WIDTHS) {
 }
 
 // Отдельно проверяем, что настройки действительно открываются на узком экране.
+// Нажимаем НАСТОЯЩИМ касанием по координатам, а не вызовом click() на элементе:
+// программный вызов обходит проверку попадания и не замечает невидимых перекрытий,
+// которые съедают касания в реальном приложении.
 await send('Emulation.setDeviceMetricsOverride', {
   width: 360, height: 780, deviceScaleFactor: 2, mobile: true,
 });
 await send('Page.navigate', { url: `${baseUrl}/#/today` });
 await wait(2200);
 
-const tapped = await evaluate(`(() => {
-  const tab = [...document.querySelectorAll('.tab')].find((t) => t.textContent.includes('Настройки'));
-  if (!tab) return 'вкладка Настройки не найдена';
-  tab.click();
-  return 'нажали';
-})()`);
-await wait(900);
+async function tapCenter(selectorText, label) {
+  const point = await evaluate(`(() => {
+    const node = [...document.querySelectorAll('button, .tab, a')]
+      .find((item) => item.textContent.includes(${JSON.stringify(selectorText)}));
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    return JSON.stringify({ x: Math.round((rect.left + rect.right) / 2), y: Math.round((rect.top + rect.bottom) / 2) });
+  })()`);
+  if (!point) return `${label}: элемент не найден`;
+  const { x, y } = JSON.parse(point);
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await send('Input.dispatchMouseEvent', {
+      type, x, y, button: 'left', clickCount: 1, pointerType: 'mouse',
+    });
+  }
+  await wait(700);
+  return `${label}: касание отправлено (${x}, ${y})`;
+}
+
+console.log(`\n${await tapCenter('Настройки', 'вкладка Настройки')}`);
 
 const afterTap = await evaluate(`JSON.stringify({
   hash: location.hash,
@@ -178,12 +194,31 @@ const afterTap = await evaluate(`JSON.stringify({
   версия: [...document.querySelectorAll('p')].map((p) => p.textContent)
     .find((text) => text.includes('версия приложения')) || 'нет строки версии',
 })`);
-console.log(`\nпереход в настройки: ${tapped}`);
 console.log(`после нажатия: ${afterTap}`);
 
 const parsed = JSON.parse(afterTap);
-if (parsed.hash !== '#/settings') problems.push('нажатие на «Настройки» не открыло экран настроек');
+if (parsed.hash !== '#/settings') problems.push('касание по «Настройки» не открыло экран настроек');
 if (!parsed.секций) problems.push('на экране настроек нет ни одной секции');
 
-console.log(problems.length ? `\nНАЙДЕНО ПРОБЛЕМ (${problems.length}):\n${problems.join('\n')}` : '\nвёрстка в порядке');
+// Проверяем, что касания доходят до содержимого, а не гасятся невидимым слоем.
+await send('Page.navigate', { url: `${baseUrl}/#/today` });
+await wait(2000);
+console.log(`\n${await tapCenter('Фото', 'кнопка Фото')}`);
+const sheetOpened = await evaluate(`Boolean(document.querySelector('.sheet'))`);
+if (!sheetOpened) problems.push('касание по «Фото» не открыло карточку добавления');
+console.log(`карточка добавления открылась: ${sheetOpened}`);
+
+const blockers = await evaluate(`(() => {
+  const points = [[60, 120], [180, 300], [300, 700]];
+  return JSON.stringify(points.map(([x, y]) => {
+    const node = document.elementFromPoint(x, y);
+    return node ? (node.id ? '#' + node.id : (node.className ? '.' + String(node.className).split(' ')[0] : node.tagName)) : 'ничего';
+  }));
+})()`);
+console.log(`что ловит касания в трёх точках экрана: ${blockers}`);
+if (String(blockers).includes('sheetRoot')) {
+  problems.push('невидимая шторка перехватывает касания (sheetRoot в списке перехватчиков)');
+}
+
+console.log(problems.length ? `\nНАЙДЕНО ПРОБЛЕМ (${problems.length}):\n${problems.join('\n')}` : '\nвёрстка и касания в порядке');
 ws.close();
