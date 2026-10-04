@@ -6,9 +6,11 @@ import { h } from './util.js';
 import { openAddSheet } from './ui/add.js';
 import * as settings from './ui/settings.js';
 import * as today from './ui/today.js';
+import * as usage from './ui/usage.js';
 
 const ROUTES = {
   '/today': today,
+  '/usage': usage,
   '/settings': settings,
 };
 
