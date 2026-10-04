@@ -1,22 +1,16 @@
 // Кэшируем только оболочку приложения: сами файлы. Данные пользователя лежат
 // в IndexedDB и в кэш не попадают никогда.
-const VERSION = 'kbju-v1';
+//
+// Список ниже — минимальный, чтобы приложение поднималось при разработке. При сборке
+// (tools/build-www.mjs) он заменяется полным списком файлов приложения, а там же
+// подставляется имя кэша по отпечатку содержимого.
+const VERSION = 'kbju-dev';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './css/styles.css',
   './js/app.js',
-  './js/db.js',
-  './js/state.js',
-  './js/norm.js',
-  './js/util.js',
-  './js/ui/today.js',
-  './js/ui/add.js',
-  './js/ui/settings.js',
-  './js/ui/components/ring.js',
-  './js/ui/components/bar.js',
-  './js/ui/components/sheet.js',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
