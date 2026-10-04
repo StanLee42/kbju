@@ -121,11 +121,17 @@ export function encodeWav({ samples, sampleRate = SPEECH_SAMPLE_RATE, channels =
   return buffer;
 }
 
-/** Готовит записанные каналы к отправке: моно, нужная частота, WAV. */
+/**
+ * Готовит записанные каналы к отправке: моно, нужная частота, WAV.
+ *
+ * Возвращаются и сами подготовленные сэмплы: распознавание речи на устройстве считает
+ * по числам, а не по файлу, а второй раз пересчитывать их из WAV незачем.
+ */
 export function prepareSpeech({ channels, sampleRate, targetRate = SPEECH_SAMPLE_RATE }) {
   const mono = downmixToMono(channels);
   const resampled = resampleLinear(mono, sampleRate, targetRate);
   return {
+    samples: resampled,
     wav: encodeWav({ samples: resampled, sampleRate: targetRate }),
     sampleRate: targetRate,
     durationSeconds: durationSeconds(resampled.length, targetRate),

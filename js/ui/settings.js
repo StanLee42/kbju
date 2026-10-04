@@ -1,6 +1,7 @@
 // Настройки: типы дней, расписание, исключения на даты, цель и темп, хранилище.
 import { isStoragePersistent, requestPersistentStorage, usageEstimate, wipeEverything } from '../db.js';
 import * as db from '../db.js';
+import { availableConfigs, configById, detectAcceleration, pickDefaultConfig } from '../audio/recognize.js';
 import { AVAILABLE_PROVIDERS, createProvider, describeError, readImpedance } from '../llm/index.js';
 import { pickImage, prepareForApi } from '../media/image.js';
 import { normsFromMeasurement, dayTypeById, resolveDayTypeId } from '../norm.js';
@@ -26,6 +27,7 @@ const MACRO_FIELDS = [
 
 export function mount(container) {
   const providerHost = h('div', {});
+  const voiceHost = h('div', {});
   const reportHost = h('div', {});
   const pricesHost = h('div', {});
   const dayTypesHost = h('div', {});
@@ -40,6 +42,9 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Провайдер анализа' }),
       providerHost),
+    h('section', { class: 'card' },
+      h('h2', { class: 'card-title', text: 'Распознавание речи' }),
+      voiceHost),
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Нормы из отчёта' }),
       reportHost),
@@ -214,6 +219,67 @@ export function mount(container) {
       renderProvider();
     }
   }
+
+  // --- распознавание речи ---
+
+  let voiceAcceleration = null;
+  let voiceCheckFailed = false;
+
+  function renderVoice() {
+    const chosen = store.settings.voice?.config || '';
+    const offered = voiceAcceleration ? availableConfigs(voiceAcceleration) : [];
+    const chosenConfig = chosen ? configById(chosen) : null;
+    const chosenOffered = Boolean(chosenConfig) && offered.some((item) => item.id === chosen);
+    const effective = chosenOffered ? chosenConfig : (voiceAcceleration ? pickDefaultConfig(voiceAcceleration) : null);
+
+    const nodes = [];
+
+    if (!voiceAcceleration) {
+      nodes.push(h('p', { class: 'small muted' }, voiceCheckFailed
+        ? 'Не удалось проверить, умеет ли телефон считать на видеокарте. Считаем, что не умеет.'
+        : 'Проверяем, умеет ли телефон считать на видеокарте…'));
+    } else {
+      nodes.push(h('p', { class: 'small muted' }, voiceAcceleration.webgpu
+        ? `Толкать расчёт на видеокарту можно${voiceAcceleration.adapter ? ` (${voiceAcceleration.adapter})` : ''}: такие сборки считают в разы быстрее.`
+        : `Видеокарту для расчёта телефон не даёт — ${voiceAcceleration.reason}. Сборки с ускорением здесь не предлагаются.`));
+    }
+
+    if (voiceAcceleration) {
+      const choices = [
+        { id: '', label: 'Автоматически', note: `по возможностям устройства — сейчас это «${effective?.label || 'средняя'}»` },
+        ...offered,
+      ];
+      nodes.push(h('div', { class: 'choice' }, choices.map((option) => h('button', {
+        class: 'btn', type: 'button',
+        'aria-pressed': String((option.id || '') === (chosenOffered ? chosen : '')),
+        onclick: async () => {
+          await saveSettings({ voice: { ...store.settings.voice, config: option.id } });
+          renderVoice();
+        },
+      },
+      h('div', { style: 'font-weight:600' }, option.label),
+      h('div', { class: 'tiny faint', style: 'margin-top:2px' }, option.note)))));
+    }
+
+    if (chosenConfig && !chosenOffered) {
+      nodes.push(h('p', { class: 'small', style: 'margin-top:10px;color:var(--over)' },
+        `Выбранная сборка «${chosenConfig.label}» на этом устройстве не заработает: `
+        + 'распознавание возьмёт автоматическую.'));
+    }
+
+    nodes.push(h('p', { class: 'tiny faint', style: 'margin-top:12px' },
+      'Речь распознаётся на телефоне, наружу уходит только текст. Вес указан измеренный: '
+      + 'столько скачает телефон при первом распознавании. Дальше модель остаётся в памяти, '
+      + 'и повторная загрузка занимает меньше секунды.'));
+
+    voiceHost.replaceChildren(...nodes);
+  }
+
+  // Проверка ускорения — асинхронная: пока она идёт, раздел показывает «проверяем…».
+  detectAcceleration()
+    .then((result) => { voiceAcceleration = result; })
+    .catch(() => { voiceCheckFailed = true; })
+    .finally(renderVoice);
 
   // --- нормы из отчёта биоимпеданса ---
 
@@ -719,6 +785,7 @@ export function mount(container) {
 
   renderDynamic();
   renderProvider();
+  renderVoice();
   renderReport();
   renderPrices();
   renderStorage();

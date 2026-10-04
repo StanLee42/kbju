@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Стенд распознавания речи</title>
+<!--
+  Проверочная страница: убедиться, что распознавание речи на устройстве действительно
+  скачивает модель, считает и выдаёт текст. В приложение не попадает (сборка берёт
+  только перечисленные файлы) и живёт в tools/.
+
+  База — корень репозитория: тогда путь к потоку распознавания внутри приложения
+  (./js/audio/recognize.worker.js) совпадает с тем, что видит страница, и стенд
+  проверяет ровно тот код, который поедет в сборку.
+
+  Запуск: node tools/recognize-probe.mjs --configs tiny-wasm
+-->
+<base href="/">
+<style>
+  body { margin: 0; padding: 12px; background: #14161a; color: #e6e8eb;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .ok { color: #6ee7a8; } .bad { color: #ff8f8f; } .dim { color: #8b93a1; }
+</style>
+</head>
+<body>
+<pre id="log">стенд запускается…</pre>
+<script type="module">
+import {
+  LANGUAGE_CODE, availableConfigs, configById, createRecognizer, detectAcceleration,
+  hasWebGPU, pickDefaultConfig,
+} from './js/audio/recognize.js';
+
+const params = new URLSearchParams(location.search);
+const wanted = (params.get('configs') || '').split(',').map((s) => s.trim()).filter(Boolean);
+const manifestUrl = params.get('samples') || 'spike/voice/samples.json';
+const logNode = document.getElementById('log');
+
+/**
+ * Сборки для замера, которых пока нет в списке приложения.
+ * Формат: «id:модель:устройство:точность», точность — одно значение на обе части
+ * или два через «+» (кодировщик и декодер). Нужны, чтобы сравнить варианты
+ * вроде int8 у средней модели, не меняя код приложения ради замера.
+ */
+function parseAdhoc(spec) {
+  const [id, model, device, dtype] = spec.split(':');
+  if (!id || !model || !device || !dtype) return null;
+  const parts = dtype.split('+');
+  return {
+    id,
+    label: `${id} (замер)`,
+    note: `${model}, ${device}, ${dtype}`,
+    model,
+    device,
+    dtype: parts.length === 1 ? parts[0] : { encoder_model: parts[0], decoder_model_merged: parts[1] },
+    sizeMb: null,
+  };
+}
+
+const adhocConfigs = (params.get('adhoc') || '').split(',').map((s) => s.trim())
+  .filter(Boolean).map(parseAdhoc).filter(Boolean);
+
+// Результаты складываем в window.__probe: так их забирает запускающий скрипт
+// через отладочный протокол, не разбирая текст со страницы.
+const probe = { status: 'running', webgpu: null, defaultConfig: null, configs: [], log: [] };
+window.__probe = probe;
+
+function say(line) {
+  probe.log.push(line);
+  logNode.textContent = probe.log.join('\n');
+}
+
+/** Разбор WAV: нужен блок data, а заголовок может быть длиннее 44 байт. */
+function decodeWav(buffer) {
+  const view = new DataView(buffer);
+  const tag = (offset) => String.fromCharCode(
+    view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3),
+  );
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') throw new Error('это не WAV');
+
+  let format = null;
+  let data = null;
+  for (let offset = 12; offset + 8 <= view.byteLength;) {
+    const name = tag(offset);
+    const size = view.getUint32(offset + 4, true);
+    if (name === 'fmt ') {
+      format = {
+        channels: view.getUint16(offset + 10, true),
+        sampleRate: view.getUint32(offset + 12, true),
+        bits: view.getUint16(offset + 22, true),
+      };
+    } else if (name === 'data') {
+      data = { start: offset + 8, size };
+    }
+    offset += 8 + size + (size % 2);
+  }
+  if (!format || !data) throw new Error('в WAV нет блока данных');
+  if (format.bits !== 16) throw new Error(`ожидались 16 бит, а тут ${format.bits}`);
+  if (format.sampleRate !== 16000) throw new Error(`ожидались 16 кГц, а тут ${format.sampleRate}`);
+  if (format.channels !== 1) throw new Error(`ожидался моно, а тут каналов ${format.channels}`);
+
+  const count = Math.floor(data.size / 2);
+  const samples = new Float32Array(count);
+  for (let index = 0; index < count; index += 1) {
+    samples[index] = view.getInt16(data.start + index * 2, true) / 32768;
+  }
+  return { samples, seconds: count / 16000 };
+}
+
+async function loadSamples() {
+  const response = await fetch(manifestUrl);
+  if (!response.ok) throw new Error(`не прочитался список образцов (${response.status})`);
+  const manifest = await response.json();
+  const samples = [];
+  for (const item of manifest) {
+    const buffer = await (await fetch(item.file)).arrayBuffer();
+    const decoded = decodeWav(buffer);
+    samples.push({ ...item, ...decoded });
+  }
+  return samples;
+}
+
+/** Грубое совпадение распознанного с произнесённым: слова, а не буквы. */
+function wordMatch(expected, actual) {
+  const words = (text) => String(text).toLowerCase().replace(/ё/g, 'е')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  const want = words(expected);
+  const got = new Set(words(actual));
+  const hit = want.filter((word) => got.has(word)).length;
+  return { hit, total: want.length };
+}
+
+async function run() {
+  const acceleration = await detectAcceleration();
+  probe.acceleration = acceleration;
+  probe.hasWebGpuApi = hasWebGPU();
+  probe.defaultConfig = pickDefaultConfig(acceleration)?.id || null;
+  probe.offeredConfigs = availableConfigs(acceleration).map((config) => config.id);
+  say(`устройство: ${navigator.userAgent}`);
+  // Наличие navigator.gpu ещё ничего не значит: в эмуляторе Android он есть,
+  // а адаптер не выдаётся. Печатаем то, что ответила настоящая проверка.
+  say(`ускорение видеокартой: ${acceleration.webgpu
+    ? `работает${acceleration.adapter ? ` (${acceleration.adapter})` : ''}`
+    : `недоступно — ${acceleration.reason}`}`);
+  say(`модель по умолчанию: ${probe.defaultConfig}`);
+  say(`предлагается сборок: ${probe.offeredConfigs.join(', ')}`);
+  say('');
+
+  const samples = await loadSamples();
+  say(`образцы: ${samples.map((s) => `${s.file} (${s.seconds.toFixed(1)} с)`).join(', ')}`);
+  say('');
+
+  for (const id of wanted) {
+    const config = configById(id) || adhocConfigs.find((item) => item.id === id);
+    if (!config) { say(`неизвестная сборка модели: ${id}`); continue; }
+
+    const row = {
+      id, label: config.label, model: config.model, device: config.device,
+      dtype: typeof config.dtype === 'string' ? config.dtype : JSON.stringify(config.dtype),
+      expectedMb: config.sizeMb, load: {}, recognize: [], reload: null, error: null,
+    };
+    probe.configs.push(row);
+    say(`— ${id} (${config.label}, ${config.device})`);
+
+    const recognizer = createRecognizer({
+      onProgress: (progress) => {
+        row.load.percent = progress.percent;
+        probe.progress = { id: config.id, percent: progress.percent };
+        // Библиотека отчитывается по каждому файлу отдельно: складываем общий вес,
+        // чтобы получить настоящий размер загрузки, а не обещанный в подписи.
+        row.load.bytes = Math.max(row.load.bytes || 0, progress.total || 0);
+        // История нужна, чтобы поймать уменьшение общего веса: так видно, если
+        // размер файла теряется на сообщении «готово».
+        row.load.trail = row.load.trail || [];
+        const last = row.load.trail[row.load.trail.length - 1];
+        if (!last || last.percent !== progress.percent || last.total !== progress.total) {
+          row.load.trail.push({ percent: progress.percent, total: progress.total });
+        }
+      },
+    });
+
+    const loadStarted = performance.now();
+    try {
+      const answer = await recognizer.load(config);
+      if (answer?.fallback) {
+        row.fallback = answer.fallback;
+        say(`  <span class="dim">ускорение отказало — перешёл на «${answer.fallback.to}»</span>`);
+      }
+    } catch (error) {
+      row.error = { stage: 'load', title: error?.title || 'ошибка', details: error?.details || '' };
+      row.load.ms = Math.round(performance.now() - loadStarted);
+      say(`  <span class="bad">не загрузилось за ${(row.load.ms / 1000).toFixed(1)} с</span>`);
+      say(`  причина: ${row.error.title}`);
+      if (row.error.details) say(`  подробности: ${row.error.details}`);
+      say('');
+      recognizer.close();
+      continue;
+    }
+    row.load.ms = Math.round(performance.now() - loadStarted);
+    row.load.mb = row.load.bytes ? Number((row.load.bytes / 1048576).toFixed(1)) : null;
+    say(`  загрузка: ${(row.load.ms / 1000).toFixed(1)} с${row.load.mb ? `, ${row.load.mb} МБ` : ''}`
+      + (config.sizeMb ? ` (в подписи ${config.sizeMb} МБ)` : ''));
+
+    for (const sample of samples) {
+      const started = performance.now();
+      try {
+        const result = await recognizer.recognize(sample.samples, { language: LANGUAGE_CODE });
+        const ms = Math.round(performance.now() - started);
+        const match = wordMatch(sample.text, result.text);
+        row.recognize.push({
+          file: sample.file, expected: sample.text, text: result.text,
+          ms, audioSeconds: Number(sample.seconds.toFixed(2)),
+          realtime: Number((ms / 1000 / sample.seconds).toFixed(2)),
+          words: match,
+        });
+        say(`  ${sample.file}: «${result.text}»`);
+        say(`  <span class="dim">    счёт ${ms} мс на ${sample.seconds.toFixed(1)} с звука `
+          + `(×${(ms / 1000 / sample.seconds).toFixed(2)} от длительности), `
+          + `слов совпало ${match.hit} из ${match.total}</span>`);
+      } catch (error) {
+        row.recognize.push({ file: sample.file, error: error?.title || 'ошибка', details: error?.details || '' });
+        say(`  <span class="bad">${sample.file}: ${error?.title || 'ошибка'} — ${error?.details || ''}</span>`);
+      }
+    }
+
+    // Вторая загрузка в новом потоке: так проверяется именно кэш браузера,
+    // а не внутренняя памятка о том, что модель уже загружена.
+    recognizer.close();
+    const again = createRecognizer();
+    const reloadStarted = performance.now();
+    try {
+      await again.load(config);
+      row.reload = { ms: Math.round(performance.now() - reloadStarted) };
+      say(`  <span class="dim">повторная загрузка: ${(row.reload.ms / 1000).toFixed(1)} с</span>`);
+    } catch (error) {
+      row.reload = { error: error?.title || String(error) };
+      say(`  <span class="bad">повторная загрузка не удалась: ${row.reload.error}</span>`);
+    }
+    again.close();
+    say('');
+  }
+
+  probe.status = 'done';
+  probe.finishedAt = Date.now();
+  say('готово');
+}
+
+run().catch((error) => {
+  probe.status = 'failed';
+  probe.fatal = `${error?.message || error}`;
+  say(`<span class="bad">стенд упал: ${probe.fatal}</span>`);
+});
+</script>
+</body>
+</html>

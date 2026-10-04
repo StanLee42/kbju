@@ -7,8 +7,9 @@ import {
 import { createBar } from './components/bar.js';
 import { createRing } from './components/ring.js';
 import { openAddSheet } from './add.js';
-import { openPhotoEntrySheet, openPhotoSheet } from './addphoto.js';
-import { toast } from './components/sheet.js';
+import { openPhotoSheet } from './addphoto.js';
+import { openEntryDetails } from './result-card.js';
+import { openVoiceSheet } from './voice.js';
 
 const PORTION_LABEL = { small: 'маленькая порция', normal: '', large: 'большая порция' };
 
@@ -18,8 +19,8 @@ export function mount(container) {
   const source = h('div', { class: 'tiny faint', style: 'margin-top:2px' });
   const switchRow = h('div', { class: 'chips', style: 'margin-top:10px' });
 
-  // Два основных способа ввода. Голос появится на третьем этапе, поэтому кнопка
-  // на месте, но честно сообщает, что ещё не работает.
+  // Два основных способа ввода: снимок и голос. Оба приводят к одной карточке разбора,
+  // а запись появляется в дневнике только по подтверждению.
   const actionsRow = h('div', { class: 'chips', style: 'margin-top:12px' },
     h('button', {
       class: 'btn btn-primary', type: 'button', style: 'flex:1',
@@ -27,7 +28,7 @@ export function mount(container) {
     }),
     h('button', {
       class: 'btn', type: 'button', style: 'flex:1', text: '🎤 Голос',
-      onclick: () => toast('Голосовой ввод появится на третьем этапе'),
+      onclick: () => openVoiceSheet({ date: store.date }),
     }));
 
   const kcalRing = createRing({ size: 154, stroke: 13, color: 'var(--kcal)' });
@@ -83,9 +84,9 @@ export function mount(container) {
       const portion = PORTION_LABEL[entry.portion] || '';
       const sub = [entry.grams ? `${round(entry.grams)} г` : '', portion, entry.portionNote]
         .filter(Boolean).join(' · ');
-      // Записи из фотографии открываются со снимком и позициями, ручные — формой правки.
-      const open = () => (entry.source === 'photo' && entry.items?.length
-        ? openPhotoEntrySheet(entry)
+      // Разбор из фото или голоса открывается карточкой с позициями, ручные — формой правки.
+      const open = () => (['photo', 'voice'].includes(entry.source) && entry.items?.length
+        ? openEntryDetails(entry)
         : openAddSheet({ entry }));
       return h('div', { class: 'entry', onclick: open },
         h('div', { class: 'entry-time', text: formatTime(entry.time) }),
