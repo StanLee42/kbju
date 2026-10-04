@@ -81,6 +81,14 @@ async function main() {
   console.log(`версия сборки: ${version} — кэш обновится при первой загрузке`);
   console.log(`в офлайн-кэш включено файлов: ${shell.length}`);
 
+  // Версию видно и снаружи: файл читается приложением на экране настроек,
+  // поэтому всегда понятно, какая сборка живёт на телефоне и на хостинге.
+  await writeFile(
+    join(target, 'version.txt'),
+    `${version}\nсобрано ${new Date().toISOString()}\n`,
+    'utf8',
+  );
+
   // Проверяем, что подставленный список ссылается только на существующие файлы.
   const missing = [];
   for (const path of shell.slice(1)) {

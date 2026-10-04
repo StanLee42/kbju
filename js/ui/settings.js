@@ -63,9 +63,40 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Хранилище' }),
       storageHost),
+    buildVersionLine(),
   );
 
-  // --- провайдер анализа ---
+  // --- версия сборки ---
+
+  /**
+   * Показывает, какая сборка сейчас работает. Файл версии читаем в обход кэша,
+   * иначе service worker отдаст старую строку и смысл проверки потеряется.
+   */
+  function buildVersionLine() {
+    const line = h('p', { class: 'tiny faint center' }, 'версия приложения: определяем…');
+
+    fetch('./version.txt', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.text() : Promise.reject(new Error('нет файла версии'))))
+      .then((text) => {
+        const [version, builtLine] = String(text).trim().split('\n');
+        const built = builtLine?.replace(/^собрано /, '');
+        let when = '';
+        if (built) {
+          const date = new Date(built);
+          if (!Number.isNaN(date.getTime())) {
+            when = ` · сборка ${date.toLocaleString('ru-RU', {
+              day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+            })}`;
+          }
+        }
+        line.textContent = `версия приложения: ${version}${when}`;
+      })
+      .catch(() => {
+        line.textContent = 'версия приложения: сборка для разработки';
+      });
+
+    return line;
+  }
 
   let keyCheck = null;
   let keyBusy = false;
