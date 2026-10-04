@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   SPEECH_SAMPLE_RATE, downmixToMono, durationSeconds, encodeWav, floatToInt16,
-  prepareSpeech, resampleLinear,
+  isTooQuiet, prepareSpeech, recordLoudness, resampleLinear,
 } from '../js/audio/wav.js';
 
 function readText(view, offset, length) {
@@ -108,4 +108,23 @@ test('длительность считается по частоте', () => {
   assert.equal(durationSeconds(16000, 16000), 1);
   assert.equal(durationSeconds(8000, 16000), 0.5);
   assert.equal(durationSeconds(100, 0), 0);
+});
+
+test('громкость записи отличает речь от тишины', () => {
+  const silence = new Float32Array(16000);
+  assert.equal(recordLoudness(silence).peak, 0);
+  assert.equal(isTooQuiet(recordLoudness(silence)), true);
+
+  // Тихая, но не пустая запись: пик выше порога тишины.
+  const quiet = new Float32Array(16000).fill(0.03);
+  assert.equal(isTooQuiet(recordLoudness(quiet)), false);
+
+  const speech = new Float32Array(16000).map((_, index) => Math.sin(index / 20) * 0.6);
+  const loudness = recordLoudness(speech);
+  assert.ok(loudness.peak > 0.5);
+  assert.equal(isTooQuiet(loudness), false);
+
+  // Пустой вход не падает и считается тишиной.
+  assert.equal(recordLoudness(null).peak, 0);
+  assert.equal(isTooQuiet(null), true);
 });

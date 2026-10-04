@@ -7,11 +7,12 @@
 // Звук никуда не уходит: распознавание считает на устройстве, провайдеру отправляется
 // только текст.
 import { createRecorder } from '../audio/recorder.js';
+import { isTooQuiet } from '../audio/wav.js';
 import {
-  availableConfigs, configById, createRecognizer, detectAcceleration, pickDefaultConfig,
+  availableConfigs, configById, createRecognizer, detectAcceleration, pickDefaultConfig, wasmTwinOf,
 } from '../audio/recognize.js';
 import { analyzeSpoken, createProvider, describeError } from '../llm/index.js';
-import { addEntry, store } from '../state.js';
+import { addEntry, saveSettings, store } from '../state.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { bytesHuman, fill, h, nowTime, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
@@ -55,6 +56,7 @@ export function openVoiceSheet({ date = null } = {}) {
     seconds: 0,
     duration: 0,
     recognizeSeconds: null,
+    loudness: null,
     transcript: '',
     analysis: null,
     error: null,
@@ -141,6 +143,7 @@ export function openVoiceSheet({ date = null } = {}) {
     const audio = recorder.stop();
     recorder = null;
     state.duration = audio.durationSeconds;
+    state.loudness = audio.loudness;
     state.step = 'recognizing';
     render();
 
@@ -150,7 +153,7 @@ export function openVoiceSheet({ date = null } = {}) {
         // Человек говорил, а модели нечего показать: это не ошибка расчёта, а повод записать снова.
         state.error = {
           title: 'Ничего не расслышали',
-          hint: 'Попробуйте записать ещё раз — ближе к микрофону и без лишнего шума.',
+          hint: quietHint() || 'Попробуйте записать ещё раз — ближе к микрофону и без лишнего шума.',
           details: '',
           recordAgain: true,
         };
@@ -166,6 +169,14 @@ export function openVoiceSheet({ date = null } = {}) {
       state.step = 'error';
       render();
     }
+  }
+
+  /** Тихая запись объясняет и плохую расшифровку, и «ничего не расслышали». */
+  function quietHint() {
+    return isTooQuiet(state.loudness)
+      ? 'В записи почти нет звука: кажется, микрофон ничего не услышал. '
+        + 'Проверьте, что не закрыт микрофон, и скажите ближе к телефону.'
+      : '';
   }
 
   function cancelRecording() {
@@ -442,25 +453,48 @@ export function openVoiceSheet({ date = null } = {}) {
 
     // Показываем, чем именно считали и сколько это заняло: по этим числам видно,
     // стоит ли брать модель поменьше, и понятно, почему пришлось подождать.
+    // Название видеокарты здесь же: по нему видно, настоящая она или программная.
     const facts = [
       state.model ? state.model.label.toLowerCase() : null,
+      state.acceleration?.adapter ? `видеокарта: ${state.acceleration.adapter}` : 'без видеокарты',
       state.recognizeSeconds !== null && state.duration
         ? `${state.recognizeSeconds.toFixed(1).replace('.', ',')} с на ${state.duration.toFixed(1).replace('.', ',')} с записи`
         : null,
     ].filter(Boolean).join(' · ');
 
-    const slowWithoutAcceleration = state.acceleration && !state.acceleration.webgpu
-      && (state.recognizeSeconds || 0) > 5;
+    // Долгий счёт — повод предложить выход, а не молча ждать столько же в следующий раз.
+    const slow = (state.recognizeSeconds || 0) > 30;
+    const twin = slow ? wasmTwinOf(state.model) : null;
+    const quiet = isTooQuiet(state.loudness);
 
-    fill(host, 
+    fill(host,
       h('p', { class: 'small muted' }, 'Вот что расслышали. Поправьте, если что-то не так, — '
         + 'дальше считаются именно эти слова.'),
       input,
       facts ? h('p', { class: 'tiny faint', style: 'margin-top:6px' }, facts) : null,
-      slowWithoutAcceleration
-        ? h('p', { class: 'tiny faint', style: 'margin-top:6px;color:var(--over)' },
-          'Телефон считает на процессоре, поэтому медленно. В настройках можно взять модель '
-          + 'поменьше — она узнаёт чуть хуже, зато считает быстрее.')
+      quiet
+        ? h('p', { class: 'small', style: 'margin-top:6px;color:var(--over)' }, quietHint())
+        : null,
+      slow
+        ? h('p', { class: 'small', style: 'margin-top:8px;color:var(--over)' },
+          `Считалось ${Math.round(state.recognizeSeconds)} с — это слишком долго для одной фразы. `
+          + (twin
+            ? 'Похоже, видеокарта на телефоне не помогает. Можно перейти на ту же модель без неё и сравнить.'
+            : 'В настройках можно взять модель поменьше — она узнаёт чуть хуже, зато считает быстрее.'))
+        : null,
+      slow && twin
+        ? h('div', { class: 'chips', style: 'margin-top:10px' },
+          h('button', {
+            class: 'btn btn-small', type: 'button',
+            text: `Взять «${twin.label}»`,
+            onclick: async () => {
+              await saveSettings({ voice: { ...store.settings.voice, config: twin.id } });
+              dropWarmRecognizer();
+              state.modelNote = `Теперь считается сборкой «${twin.label}». `
+                + 'Запишите ту же фразу и сравните время — оно будет ниже в этом же месте.';
+              startRecording();
+            },
+          }))
         : null,
       state.modelNote ? h('p', { class: 'tiny faint' }, state.modelNote) : null,
       h('div', { class: 'chips', style: 'margin-top:14px' },

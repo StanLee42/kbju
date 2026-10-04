@@ -78,20 +78,46 @@ export function hasWebGPU(nav = typeof navigator === 'undefined' ? {} : navigato
 const defaultNavigator = () => (typeof navigator === 'undefined' ? {} : navigator);
 
 /**
+ * Разбирает выданный адаптер видеокарты: годится ли он для расчёта и как называется.
+ *
+ * Наличие адаптера ещё не значит, что считать будет видеокарта. Chrome умеет выдать
+ * программный адаптер (SwiftShader) на телефонах с неподходящим драйвером: код при этом
+ * работает, но считает процессором, и распознавание одной фразы занимает минуты.
+ * Первый замер на телефоне дал 299 секунд на фразу в четыре секунды — это оно и есть.
+ */
+export function readAdapter(adapter) {
+  const info = adapter?.info || {};
+  const name = [info.vendor, info.architecture].filter(Boolean).join(' ').trim()
+    || String(info.description || '').trim();
+  const software = Boolean(adapter?.isFallbackAdapter)
+    || /swiftshader|software|llvmpipe|basic render/i.test(`${name} ${info.description || ''}`);
+  return { name, software };
+}
+
+/**
  * Работает ли ускорение на самом деле.
  *
  * Одного наличия navigator.gpu мало: в эмуляторе Android он есть, а адаптер не выдаётся,
  * и загрузка модели с ускорением падает с «Failed to get GPU adapter». Если бы мы верили
  * одному наличию поля, человек получал бы ошибку на ровном месте. Поэтому адаптер
  * запрашиваем по-настоящему — и знаем, что он вернулся, а не просто что поле есть.
+ *
+ * Программный адаптер тоже считаем непригодным: считать он будет, но медленнее процессора.
  */
 export async function detectAcceleration(nav = defaultNavigator()) {
   if (!hasWebGPU(nav)) return { webgpu: false, reason: 'браузер не умеет считать на видеокарте' };
   try {
     const adapter = await nav.gpu.requestAdapter();
     if (!adapter) return { webgpu: false, reason: 'устройство не выдало адаптер видеокарты' };
-    const info = adapter.info || {};
-    const name = [info.vendor, info.architecture].filter(Boolean).join(' ');
+    const { name, software } = readAdapter(adapter);
+    if (software) {
+      return {
+        webgpu: false,
+        software: true,
+        adapter: name,
+        reason: 'видеокарта работает программно, то есть считает процессор',
+      };
+    }
     return { webgpu: true, reason: '', adapter: name };
   } catch (error) {
     return { webgpu: false, reason: `видеокарта не ответила: ${String(error?.message || error)}` };

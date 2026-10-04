@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CONFIGS, availableConfigs, configById, createRecognizer, describeRecognizeError, detectAcceleration, hasWebGPU, pickDefaultConfig, wasmTwinOf } from '../js/audio/recognize.js';
+import { CONFIGS, availableConfigs, configById, createRecognizer, describeRecognizeError, detectAcceleration, hasWebGPU, pickDefaultConfig, readAdapter, wasmTwinOf } from '../js/audio/recognize.js';
 
 test('у каждой модели указаны размер, устройство и точность', () => {
   assert.ok(CONFIGS.length >= 4);
@@ -66,6 +66,27 @@ test('ускорение считается рабочим только если
   const absent = await detectAcceleration({});
   assert.equal(absent.webgpu, false);
   assert.match(absent.reason, /не умеет/i);
+});
+
+test('программная видеокарта за ускорение не считается', async () => {
+  // На телефоне Chrome выдал SwiftShader: считать он будет, но процессором и в разы медленнее.
+  const swift = await detectAcceleration({
+    gpu: {
+      requestAdapter: async () => ({
+        info: { vendor: 'google', architecture: 'swiftshader', description: 'SwiftShader Device (Subzero)' },
+      }),
+    },
+  });
+  assert.equal(swift.webgpu, false);
+  assert.equal(swift.software, true);
+  assert.match(swift.reason, /программно/i);
+
+  const fallback = readAdapter({ isFallbackAdapter: true, info: { vendor: 'apple', architecture: 'metal-3' } });
+  assert.equal(fallback.software, true);
+
+  const real = readAdapter({ info: { vendor: 'qualcomm', architecture: 'adreno-740' } });
+  assert.equal(real.software, false);
+  assert.equal(real.name, 'qualcomm adreno-740');
 });
 
 test('без рабочего ускорения сборки с ускорением не предлагаются', () => {

@@ -79,6 +79,33 @@ export function durationSeconds(sampleCount, rate = SPEECH_SAMPLE_RATE) {
   return rate > 0 ? sampleCount / rate : 0;
 }
 
+/** Пик, ниже которого запись считается тихой: в ней почти нет звука. */
+export const QUIET_PEAK = 0.02;
+
+/**
+ * Громкость записи: пик и средний уровень.
+ *
+ * Нужна, чтобы отличить «человек говорил, модель не разобрала» от «запись пустая»:
+ * на тишине распознавание выдаёт выдуманные слова, и без этой мерки такое выглядит
+ * как ошибка модели, хотя дело в микрофоне.
+ */
+export function recordLoudness(samples) {
+  if (!samples?.length) return { peak: 0, average: 0 };
+  let peak = 0;
+  let sum = 0;
+  for (const value of samples) {
+    const level = Math.abs(value);
+    if (level > peak) peak = level;
+    sum += level;
+  }
+  return { peak, average: sum / samples.length };
+}
+
+/** Слишком ли тихая запись, чтобы её вообще было слышно. */
+export function isTooQuiet(loudness) {
+  return (loudness?.peak ?? 0) < QUIET_PEAK;
+}
+
 /**
  * Собирает WAV из сэмплов.
  * @param {{samples: Float32Array, sampleRate?: number, channels?: number}} options
