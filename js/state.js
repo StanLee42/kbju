@@ -36,6 +36,9 @@ function normalizeSettings(saved) {
     ...base,
     ...saved,
     goal: { ...base.goal, ...(saved.goal || {}) },
+    provider: { ...base.provider, ...(saved.provider || {}) },
+    budget: { ...base.budget, ...(saved.budget || {}) },
+    prices: saved.prices || null,
     dayTypes: Array.isArray(saved.dayTypes) && saved.dayTypes.length ? saved.dayTypes : base.dayTypes,
     schedule: {
       ...base.schedule,
@@ -102,6 +105,14 @@ export async function addEntry(data) {
     carbs: Number(data.carbs) || 0,
     comment: data.comment || '',
     source: data.source || 'manual',
+    // Поля, которые заполняются только у записей из фотографии.
+    items: Array.isArray(data.items) ? data.items : null,
+    thumbId: data.thumbId || null,
+    basis: data.basis || null,
+    confidence: data.confidence || null,
+    assumptions: data.assumptions || '',
+    portionNote: data.portionNote || '',
+    cost: Number(data.cost) || 0,
     createdAt: Date.now(),
   };
   await db.put('entries', entry);
@@ -124,9 +135,22 @@ export async function updateEntry(entry) {
 }
 
 export async function deleteEntry(id) {
+  const entry = store.entries.find((item) => item.id === id);
   await db.remove('entries', id);
+  // Превью удаляем вместе с записью, иначе картинки копятся в хранилище навсегда.
+  if (entry?.thumbId) await db.removeThumb(entry.thumbId).catch(() => {});
   store.entries = store.entries.filter((item) => item.id !== id);
   emit();
+}
+
+/** Превью фотографии: сохраняем отдельно от записи. */
+export async function saveThumb(thumb) {
+  await db.putThumb(thumb.id, thumb.blob);
+  return thumb.id;
+}
+
+export function loadThumb(id) {
+  return db.getThumb(id);
 }
 
 /** Ручное переключение типа дня: та же карта, что и исключения на даты.

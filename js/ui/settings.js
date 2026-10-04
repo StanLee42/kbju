@@ -1,7 +1,11 @@
 // Настройки: типы дней, расписание, исключения на даты, цель и темп, хранилище.
 import { isStoragePersistent, requestPersistentStorage, usageEstimate, wipeEverything } from '../db.js';
+import * as db from '../db.js';
+import { AVAILABLE_PROVIDERS, createProvider, describeError, readImpedance } from '../llm/index.js';
+import { pickImage, prepareForApi } from '../media/image.js';
+import { normsFromMeasurement, dayTypeById, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
-import { dayTypeById, resolveDayTypeId } from '../norm.js';
+import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { bytesHuman, h, num, todayISO } from '../util.js';
 import { toast } from './components/sheet.js';
 
@@ -21,6 +25,9 @@ const MACRO_FIELDS = [
 ];
 
 export function mount(container) {
+  const providerHost = h('div', {});
+  const reportHost = h('div', {});
+  const pricesHost = h('div', {});
   const dayTypesHost = h('div', {});
   const weekHost = h('div', {});
   const cycleHost = h('div', {});
@@ -30,6 +37,12 @@ export function mount(container) {
 
   container.append(
     h('h1', { text: 'Настройки', style: 'margin-bottom:12px' }),
+    h('section', { class: 'card' },
+      h('h2', { class: 'card-title', text: 'Провайдер анализа' }),
+      providerHost),
+    h('section', { class: 'card' },
+      h('h2', { class: 'card-title', text: 'Нормы из отчёта' }),
+      reportHost),
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Типы дней и нормы' }),
       dayTypesHost),
@@ -45,9 +58,354 @@ export function mount(container) {
       h('h2', { class: 'card-title', text: 'Цель и темп' }),
       buildGoalHost()),
     h('section', { class: 'card' },
+      h('h2', { class: 'card-title', text: 'Цены провайдера' }),
+      pricesHost),
+    h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Хранилище' }),
       storageHost),
   );
+
+  // --- провайдер анализа ---
+
+  let keyCheck = null;
+  let keyBusy = false;
+
+  function renderProvider() {
+    const provider = store.settings.provider || {};
+    const keyInput = h('input', {
+      type: 'password',
+      placeholder: 'sk-...',
+      value: provider.key || '',
+      autocapitalize: 'off',
+      onchange: (event) => {
+        saveSettings({ provider: { ...store.settings.provider, key: event.target.value.trim() } });
+        keyCheck = null;
+        renderProvider();
+      },
+    });
+    const modelInput = h('input', {
+      type: 'text',
+      value: provider.model || 'deepseek-flash',
+      onchange: (event) => saveSettings({
+        provider: { ...store.settings.provider, model: event.target.value.trim() || 'deepseek-flash' },
+      }),
+    });
+
+    const providerSelect = h('select', {
+      onchange: (event) => saveSettings({
+        provider: { ...store.settings.provider, id: event.target.value, key: '' },
+      }),
+    }, AVAILABLE_PROVIDERS.map((id) => h('option', {
+      value: id, text: id === 'deepseek' ? 'DeepSeek' : id, selected: (provider.id || 'deepseek') === id,
+    })));
+
+    providerHost.replaceChildren(
+      AVAILABLE_PROVIDERS.length > 1
+        ? h('label', { class: 'field' },
+          h('span', { class: 'field-label', text: 'Провайдер' }),
+          providerSelect)
+        : null,
+      h('label', { class: 'field' },
+        h('span', { class: 'field-label', text: 'Ключ' }),
+        keyInput),
+      h('label', { class: 'field' },
+        h('span', { class: 'field-label', text: 'Модель' }),
+        modelInput),
+      h('div', { class: 'chips' },
+        h('button', {
+          class: 'btn btn-small', type: 'button',
+          text: keyBusy ? 'Проверяем…' : 'Проверить ключ',
+          disabled: keyBusy,
+          onclick: checkKey,
+        })),
+      keyCheck
+        ? h('p', {
+          class: 'small', style: `margin-top:10px;${keyCheck.ok ? '' : 'color:var(--over)'}`,
+        }, keyCheck.text)
+        : null,
+      h('p', { class: 'tiny faint', style: 'margin-top:10px' },
+        'Ключ хранится только на устройстве: он не попадает ни в выгрузку дневника, '
+        + 'ни в публикацию приложения. Проверка ключа бесплатна — она спрашивает только баланс.'),
+    );
+  }
+
+  async function checkKey() {
+    keyBusy = true;
+    renderProvider();
+    try {
+      const adapter = createProvider({
+        provider: store.settings.provider.id,
+        providerKey: store.settings.provider.key,
+        model: store.settings.provider.model,
+      });
+      const balance = await adapter.balance();
+      keyCheck = balance
+        ? { ok: true, text: `Ключ работает. На счету ${balance.total.toFixed(2)} ${balance.currency}.` }
+        : { ok: true, text: 'Ключ принят, но провайдер не сообщил баланс.' };
+    } catch (error) {
+      const described = describeError(error);
+      keyCheck = { ok: false, text: `${described.title}. ${described.hint}` };
+    } finally {
+      keyBusy = false;
+      renderProvider();
+    }
+  }
+
+  // --- нормы из отчёта биоимпеданса ---
+
+  let reportBusy = false;
+  let reportMeasurements = null;
+  let reportNorms = null;
+  let reportError = null;
+  let reportFile = null;
+  let reportPreviewUrl = null;
+  // По умолчанию срезаем только шапку с именем: у отчётов этого вида она занимает
+  // около пятой части сверху, а таблица измерений начинается сразу под ней.
+  let cropFraction = 0.16;
+
+  function releasePreview() {
+    if (reportPreviewUrl) URL.revokeObjectURL(reportPreviewUrl);
+    reportPreviewUrl = null;
+  }
+
+  function renderReport() {
+    const parts = [
+      h('p', { class: 'small muted' },
+        'Пришлите отчёт биоимпеданса — приложение прочитает измерения и посчитает нормы. '
+        + 'Расчёт делается здесь же, на устройстве: формулы арифметические и их видно целиком.'),
+    ];
+
+    if (reportError) {
+      parts.push(h('div', { class: 'card', style: 'border-color:var(--over)' },
+        h('div', { class: 'small', style: 'color:var(--over)' }, reportError.title || 'Не получилось'),
+        reportError.hint ? h('div', { class: 'tiny faint', style: 'margin-top:4px' }, reportError.hint) : null));
+    }
+
+    // Снимок и обрезка: затенённая часть провайдеру не уйдёт.
+    if (reportFile && reportPreviewUrl) {
+      parts.push(
+        h('div', { style: 'position:relative;margin-top:10px;border-radius:12px;overflow:hidden' },
+          h('img', { src: reportPreviewUrl, alt: 'отчёт', style: 'width:100%;display:block' }),
+          h('div', {
+            style: `position:absolute;left:0;right:0;top:0;height:${cropFraction * 100}%;`
+              + 'background:rgba(0,0,0,.72)',
+          }),
+          h('div', {
+            style: `position:absolute;left:0;right:0;top:${cropFraction * 100}%;height:2px;`
+              + 'background:var(--accent)',
+          })),
+        h('label', { class: 'field', style: 'margin-top:10px' },
+          h('span', { class: 'field-label', text: `Убрать сверху: ${Math.round(cropFraction * 100)}%` }),
+          h('input', {
+            type: 'range', min: '0', max: '50', step: '1',
+            value: String(Math.round(cropFraction * 100)),
+            oninput: (event) => {
+              cropFraction = Number(event.target.value) / 100;
+              renderReport();
+            },
+          })),
+        h('p', { class: 'tiny faint' },
+          'Затемнённая часть не уходит провайдеру. Следите, чтобы под ней осталась таблица '
+          + 'с измерениями: если срезать лишнее, приложение не сможет посчитать нормы.'),
+        h('div', { class: 'chips', style: 'margin-top:10px' },
+          h('button', {
+            class: 'btn btn-small btn-primary', type: 'button',
+            text: reportBusy ? 'Читаем отчёт…' : 'Отправить отчёт',
+            disabled: reportBusy,
+            onclick: sendReport,
+          }),
+          h('button', {
+            class: 'btn btn-small', type: 'button', text: 'Другой снимок',
+            disabled: reportBusy,
+            onclick: pickReport,
+          })),
+      );
+    } else {
+      parts.push(h('div', { class: 'chips', style: 'margin-top:12px' },
+        h('button', {
+          class: 'btn btn-small', type: 'button',
+          text: reportBusy ? 'Читаем отчёт…' : 'Выбрать отчёт',
+          disabled: reportBusy,
+          onclick: pickReport,
+        })));
+    }
+
+    if (reportMeasurements) {
+      const m = reportMeasurements;
+      const line = (label, value, unit) => (value
+        ? h('div', { class: 'row-between', style: 'padding:3px 0' },
+          h('span', { class: 'small muted', text: label }),
+          h('span', { class: 'small mono', text: `${value} ${unit}`.trim() }))
+        : null);
+      parts.push(h('div', { style: 'margin-top:12px' },
+        line('Дата измерения', m.date || '', ''),
+        line('Вес', m.weight, 'кг'),
+        line('Тощая масса', m.leanMass, 'кг'),
+        line('Жировая масса', m.fatMass, 'кг'),
+        line('Доля жира', m.fatPercent, '%'),
+        line('Основной обмен', m.bmr, 'ккал'),
+        line('Обхват талии', m.waist, 'см')));
+    }
+
+    if (reportNorms?.ok) {
+      const n = reportNorms;
+      parts.push(h('div', { style: 'margin-top:12px' },
+        h('div', { class: 'small' }, h('b', { text: 'Посчитанные нормы' })),
+        h('div', { class: 'row-between', style: 'padding:3px 0' },
+          h('span', { class: 'small muted', text: 'Обычный день' }),
+          h('span', { class: 'small mono', text: `${n.rest.kcal} ккал · Б${n.rest.protein} Ж${n.rest.fat} У${n.rest.carbs}` })),
+        h('div', { class: 'row-between', style: 'padding:3px 0' },
+          h('span', { class: 'small muted', text: 'Тренировка' }),
+          h('span', { class: 'small mono', text: `${n.training.kcal} ккал · Б${n.training.protein} Ж${n.training.fat} У${n.training.carbs}` })),
+        h('div', { class: 'tiny faint', style: 'margin-top:6px' },
+          `Среднее по неделе ${n.weekly.kcal} ккал, ожидаемое снижение ${n.weekly.expectedLossKg} кг в неделю.`),
+        h('details', { style: 'margin-top:8px' },
+          h('summary', { class: 'tiny faint', style: 'cursor:pointer' }, 'Как это посчитано'),
+          h('div', { class: 'tiny faint', style: 'margin-top:6px;white-space:pre-wrap' }, n.steps.join('\n'))),
+        n.assumptions.length
+          ? h('div', { class: 'tiny faint', style: 'margin-top:8px' },
+            `Допущения: ${n.assumptions.join(' ')}`)
+          : null,
+        h('div', { class: 'chips', style: 'margin-top:10px' },
+          h('button', {
+            class: 'btn btn-small btn-primary', type: 'button',
+            text: 'Применить к типам дней', onclick: applyNorms,
+          }))));
+    } else if (reportMeasurements) {
+      parts.push(h('p', { class: 'small', style: 'margin-top:10px;color:var(--over)' },
+        reportNorms?.error || 'Нормы посчитать не удалось: не хватает измерений.'));
+      if (cropFraction > 0) {
+        parts.push(h('p', { class: 'tiny faint' },
+          'Возможно, обрезка срезала часть таблицы с весом и составом тела — уменьшите её '
+          + 'и отправьте снимок снова.'));
+      }
+    }
+
+    reportHost.replaceChildren(...parts);
+  }
+
+  async function pickReport() {
+    if (!store.settings.provider?.key) {
+      reportError = { title: 'Сначала задайте ключ провайдера', hint: 'Без ключа отчёт прочитать некому.' };
+      renderReport();
+      return;
+    }
+    const file = await pickImage();
+    if (!file) return;
+    releasePreview();
+    reportFile = file;
+    reportPreviewUrl = URL.createObjectURL(file);
+    reportError = null;
+    renderReport();
+  }
+
+  async function sendReport() {
+    if (!reportFile) return;
+    reportBusy = true;
+    reportError = null;
+    reportMeasurements = null;
+    reportNorms = null;
+    renderReport();
+
+    try {
+      // Обрезаем до отправки: имя и название клиники модели знать незачем.
+      const image = await prepareForApi(reportFile, { maxSide: 1600, cropTopFraction: cropFraction });
+      const adapter = createProvider({
+        provider: store.settings.provider.id,
+        providerKey: store.settings.provider.key,
+        model: store.settings.provider.model,
+      });
+      const result = await readImpedance({
+        provider: adapter,
+        image: { base64: image.base64, mime: image.mime },
+      });
+
+      const model = store.settings.provider.model || 'deepseek-flash';
+      const prices = store.settings.prices || DEFAULT_PRICES;
+      for (const usage of result.usages || []) {
+        await logUsage(makeUsageRow({ kind: 'impedance', model, usage, prices })).catch(() => {});
+      }
+
+      if (!result.ok) {
+        reportError = result.error;
+      } else {
+        reportMeasurements = result.data;
+        reportNorms = normsFromMeasurement({
+          measurement: result.data,
+          pace: store.settings.goal?.pace ?? 0.5,
+        });
+        await db.put('measurements', { id: result.data.date || `m-${Date.now()}`, ...result.data });
+      }
+    } catch (error) {
+      const described = describeError(error);
+      reportError = { title: described.title, hint: described.hint };
+    } finally {
+      reportBusy = false;
+      renderReport();
+    }
+  }
+
+  async function applyNorms() {
+    if (!reportNorms?.ok) return;
+    const types = (store.settings.dayTypes || []).map((type) => {
+      if (type.id === 'rest') return { ...type, ...reportNorms.rest };
+      if (type.id === 'train') return { ...type, ...reportNorms.training };
+      return type;
+    });
+    await saveSettings({ dayTypes: types });
+    toast('Нормы обновлены');
+    renderDynamic();
+  }
+
+  // --- цены провайдера ---
+
+  function renderPrices() {
+    const prices = store.settings.prices || DEFAULT_PRICES;
+    const model = store.settings.provider?.model || 'deepseek-flash';
+    const table = { ...(prices.perModel?.[model] || DEFAULT_PRICES.perModel['deepseek-flash']) };
+
+    const patch = (key, value) => {
+      const next = {
+        ...DEFAULT_PRICES,
+        ...prices,
+        perModel: { ...(prices.perModel || {}), [model]: { ...table, [key]: value } },
+      };
+      saveSettings({ prices: next });
+    };
+
+    const field = (key, label) => h('label', { class: 'field', style: 'margin:0' },
+      h('span', { class: 'field-label', text: label }),
+      h('input', {
+        type: 'number', inputmode: 'decimal', value: table[key],
+        onchange: (event) => patch(key, Number(event.target.value) || 0),
+      }));
+
+    pricesHost.replaceChildren(
+      h('div', { class: 'grid-2' },
+        field('inputCacheMiss', 'Вход, промах'),
+        field('inputCacheHit', 'Вход, кэш')),
+      h('div', { class: 'grid-2', style: 'margin-top:8px' },
+        field('output', 'Выход'),
+        h('label', { class: 'field', style: 'margin:0' },
+          h('span', { class: 'field-label', text: 'Цены на дату' }),
+          h('input', {
+            type: 'date', value: prices.asOf || DEFAULT_PRICES.asOf,
+            onchange: (event) => saveSettings({ prices: { ...prices, ...DEFAULT_PRICES, asOf: event.target.value } }),
+          }))),
+      h('p', { class: 'tiny faint', style: 'margin-top:10px' },
+        'Цены за миллион токенов. Все суммы в приложении — оценка: тарифы у провайдера меняются, '
+        + 'поэтому таблица редактируется и подписана датой.'),
+      h('div', { class: 'chips', style: 'margin-top:8px' },
+        h('button', {
+          class: 'btn btn-small btn-ghost', type: 'button', text: 'Вернуть значения по умолчанию',
+          onclick: () => {
+            saveSettings({ prices: null });
+            renderPrices();
+          },
+        })),
+    );
+  }
+
 
   // --- типы дней ---
 
@@ -296,6 +654,9 @@ export function mount(container) {
   }
 
   renderDynamic();
+  renderProvider();
+  renderReport();
+  renderPrices();
   renderStorage();
 
   return { destroy() {} };

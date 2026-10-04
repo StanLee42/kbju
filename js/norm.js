@@ -5,6 +5,11 @@ export const DEFAULT_SETTINGS = {
   id: 'app',
   schema: 1,
   goal: { mode: 'lose', pace: 0.5 },
+  // Провайдер анализа. Ключ хранится только на устройстве и в выгрузки не попадает.
+  provider: { id: 'deepseek', model: 'deepseek-flash', key: '' },
+  // null означает «использовать таблицу цен по умолчанию» из js/usage.js.
+  prices: null,
+  budget: { monthly: 0 },
   dayTypes: [
     { id: 'rest', name: 'Обычный день', kcal: 2000, protein: 130, fat: 65, carbs: 200 },
     { id: 'train', name: 'Тренировка', kcal: 2400, protein: 150, fat: 70, carbs: 260 },

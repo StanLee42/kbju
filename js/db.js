@@ -1,8 +1,10 @@
 // Обёртка над IndexedDB. Хранилища объявлены все сразу, включая те, что
 // понадобятся на следующих этапах: так не придётся делать миграции.
 const DB_NAME = 'kbju';
-const DB_VERSION = 1;
-const STORES = ['entries', 'settings', 'dishes', 'measurements', 'usage'];
+// Версия 3: добавлена вода. Хранилища только добавляются, существующие данные
+// при обновлении не трогаются.
+const DB_VERSION = 3;
+const STORES = ['entries', 'settings', 'dishes', 'measurements', 'usage', 'thumbs', 'water'];
 
 let dbPromise = null;
 
@@ -76,6 +78,22 @@ export function byIndex(storeName, indexName, value) {
 
 export function clearStore(storeName) {
   return run(storeName, 'readwrite', (store) => store.clear());
+}
+
+// Превью фотографий лежат отдельно от записей: иначе каждая выгрузка дневника
+// тянула бы за собой мегабайты картинок.
+
+export function putThumb(id, blob) {
+  return put('thumbs', { id, blob, at: new Date().toISOString() });
+}
+
+export async function getThumb(id) {
+  const row = await get('thumbs', id).catch(() => null);
+  return row?.blob || null;
+}
+
+export function removeThumb(id) {
+  return remove('thumbs', id);
 }
 
 export async function wipeEverything() {

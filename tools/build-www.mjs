@@ -4,7 +4,8 @@
 //
 // Список файлов намеренно задан явно и вручную: так в публикацию не попадёт
 // ни ключ из .env.local, ни история git, ни личные материалы из spike/.
-import { cp, mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -76,6 +77,23 @@ async function main() {
   }
 
   console.log(`service worker: все ${paths.length} путей на месте`);
+
+  // Имя кэша должно меняться вместе с содержимым. Иначе после публикации новой версии
+  // service worker продолжит отдавать старые файлы, и на телефоне ничего не обновится.
+  const hash = createHash('sha1');
+  for (const file of files) hash.update(await readFile(join(target, file)));
+  const version = `kbju-${hash.digest('hex').slice(0, 8)}`;
+
+  const swPath = join(target, 'sw.js');
+  const swText = await readFile(swPath, 'utf8');
+  const stamped = swText.replace(/const VERSION = '[^']*'/, `const VERSION = '${version}'`);
+  if (stamped === swText) {
+    console.error('не удалось подставить версию в sw.js: константа VERSION не найдена');
+    return 1;
+  }
+  await writeFile(swPath, stamped, 'utf8');
+  console.log(`версия сборки: ${version} — кэш обновится при первой загрузке`);
+
   console.log('готово. Перетащите эту папку в https://app.netlify.com/drop');
   return 0;
 }
