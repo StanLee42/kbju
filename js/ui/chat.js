@@ -36,6 +36,7 @@ export function openChatSheet({ date = null } = {}) {
   // на каждой перерисовке, клавиатура на телефоне закрывается прямо во время набора.
   const messageInput = h('textarea', {
     class: 'composer-input', rows: 2,
+    spellcheck: false,
     oninput: (event) => { state.text = event.target.value; },
   });
 

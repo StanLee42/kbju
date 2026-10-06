@@ -23,6 +23,9 @@ export function openAddSheet({ entry = null, date = null } = {}) {
   const nameInput = h('input', {
     type: 'text', placeholder: 'Например: борщ со сметаной', value: entry?.name || '',
     autocapitalize: 'sentences',
+    // Проверку орфографии Chrome выключаем: словаря на русском у него нет, он подчёркивает
+    // всё подряд, а его меню закрывает клавиатуру прямо во время набора.
+    spellcheck: false,
   });
 
   const timeInput = h('input', { type: 'time', value: (entry?.time || nowTime()).slice(0, 5) });
@@ -44,6 +47,7 @@ export function openAddSheet({ entry = null, date = null } = {}) {
 
   const commentInput = h('input', {
     type: 'text', placeholder: 'Комментарий, необязательно', value: entry?.comment || '',
+    spellcheck: false,
   });
 
   const preview = h('div', { class: 'small muted', style: 'margin-top:10px' });

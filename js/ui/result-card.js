@@ -93,6 +93,7 @@ export function createResultCard({
       h('span', { class: 'field-label', text: label }),
       h('input', {
         type: key === 'name' ? 'text' : 'number',
+        spellcheck: false,
         inputmode: key === 'name' ? undefined : 'decimal',
         value: item[key],
         style: width ? `width:${width}` : '',
