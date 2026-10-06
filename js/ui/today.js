@@ -69,7 +69,7 @@ export function mount(container) {
       isToday
         ? null
         : h('button', {
-          class: 'badge', type: 'button', text: 'К сегодняшнему дню',
+          class: 'badge', type: 'button', text: 'Вернуться к сегодня',
           onclick: () => loadDay(todayISO()),
         }));
 

@@ -32,6 +32,13 @@ export function openChatSheet({ date = null } = {}) {
     busy: false,
   };
 
+  // Поле ввода создаём один раз и дальше только меняем подсказку: если пересоздавать его
+  // на каждой перерисовке, клавиатура на телефоне закрывается прямо во время набора.
+  const messageInput = h('textarea', {
+    class: 'composer-input', rows: 2,
+    oninput: (event) => { state.text = event.target.value; },
+  });
+
   const thread = h('div', { class: 'thread' });
   const draftBar = h('div', { class: 'draft-bar', hidden: true });
   const composer = h('div', {});
@@ -146,16 +153,12 @@ export function openChatSheet({ date = null } = {}) {
         }))
       : null;
 
-    const input = h('textarea', {
-      class: 'composer-input', rows: 2,
-      placeholder: state.current ? 'Уточните, если нужно' : 'Что вы съели',
-      value: state.text,
-      oninput: (event) => { state.text = event.target.value; },
-    });
+    messageInput.placeholder = state.current ? 'Уточните, если нужно' : 'Что вы съели';
+    if (messageInput.value !== state.text) messageInput.value = state.text;
 
     fill(composer,
       attached,
-      input,
+      messageInput,
       h('div', { class: 'composer-row' },
         h('div', { class: 'chips' }, chips),
         h('button', {
