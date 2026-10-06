@@ -328,6 +328,68 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ---------- Плашка дня и календарь ---------- */
+
+/* Тип дня показываем одной плашкой: рядом два типа путали — непонятно, какой текущий. */
+.day-badge-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.badge-day { border-color: var(--accent); }
+
+/* Календарь: семь равных колонок, чтобы месяцы не разъезжались. */
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cal-title { font-weight: 600; text-transform: capitalize; }
+
+.cal-weekdays,
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+
+.cal-weekdays {
+  margin-top: 10px;
+  margin-bottom: 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: center;
+}
+
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 46px;
+  padding: 4px 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cal-day .cal-num { font-size: 14px; }
+.cal-day .cal-kcal { font-size: 9.5px; color: var(--text-faint); }
+
+/* Дни соседних месяцев видны, но бледнее: так недели не рвутся. */
+.cal-day[data-out="1"] { opacity: .4; }
+.cal-day[data-today="1"] { border-color: var(--accent); }
+.cal-day[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elev-2));
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 /* ---------- Разговор про еду ---------- */
 
 /* Переписка ограничена по высоте, чтобы поле ввода всегда оставалось на виду. */
@@ -397,7 +459,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* Колонки не задаём числом: панель сама раскладывает вкладки в один ряд, сколько бы их
+     ни было. Раньше тут стояло repeat(4, 1fr), и пятая вкладка уезжала на вторую строку
+     за нижний край экрана — на неё нельзя было нажать. */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   align-items: center;
   /* Сплошной фон вместо размытия: размытие под неподвижной панелью браузер
      пересчитывает на каждом кадре прокрутки, и на телефоне это заметно тормозит. */
@@ -420,16 +486,21 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .tab[aria-current="page"] { color: var(--accent); }
 .tab-icon { font-size: 17px; line-height: 1; }
-.tab-label { font-size: 11px; }
+/* Подпись в одну строку: длинное слово не должно переносить вкладку. */
+.tab-label { font-size: 11px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Круглая кнопка добавления должна помещаться в панель целиком: при 38 пикселях
+   вместе с подписью она вылезала за нижний край экрана. */
+.tab-add { padding: 2px 0; }
 
 .tab-add .tab-plus {
   display: grid;
   place-items: center;
-  width: 38px; height: 38px;
+  width: 34px; height: 34px;
   border-radius: 50%;
   background: var(--accent);
   color: #06210f;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
   font-weight: 500;
 }

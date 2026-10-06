@@ -1,11 +1,10 @@
 // Экран «Сегодня»: кольца, полоски, лента записей, переключатель типа дня.
 import { MACROS, byTimeAscending, dayTypeById, remaining, resolveDayTypeId } from '../norm.js';
-import { store, setDayTypeOverride, subscribe } from '../state.js';
 import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull } from '../util.js';
 import { createBar } from './components/bar.js';
 import { createRing } from './components/ring.js';
+import { loadDay, store, setDayTypeOverride, subscribe } from '../state.js';
 import { openAddSheet } from './add.js';
-import { openChatSheet } from './chat.js';
 import { openEntryDetails } from './result-card.js';
 
 const PORTION_LABEL = { small: 'маленькая порция', normal: '', large: 'большая порция' };
@@ -14,15 +13,8 @@ export function mount(container) {
   const title = h('h1', { text: 'Сегодня' });
   const subtitle = h('div', { class: 'muted small' });
   const source = h('div', { class: 'tiny faint', style: 'margin-top:2px' });
-  const switchRow = h('div', { class: 'chips', style: 'margin-top:10px' });
-
-  // Способ ввода один: окно добавления, где можно написать словами, приложить снимок
-  // или сделать и то и другое. Разделять еду на «фото» и «текст» человеку незачем.
-  const actionsRow = h('div', { class: 'chips', style: 'margin-top:12px' },
-    h('button', {
-      class: 'btn btn-primary', type: 'button', style: 'flex:1',
-      text: '➕ Добавить еду', onclick: () => openChatSheet({ date: store.date }),
-    }));
+  const dayRow = h('div', { class: 'day-badge-row', style: 'margin-top:10px' });
+  const dayChoice = h('div', { class: 'chips', style: 'margin-top:8px', hidden: true });
 
   const kcalRing = createRing({ size: 154, stroke: 13, color: 'var(--kcal)' });
   const macroRings = MACROS.slice(1).map((macro) => createRing({
@@ -47,16 +39,41 @@ export function mount(container) {
     totalLine);
 
   container.append(
-    h('header', { class: 'dayhead' }, title, subtitle, source, switchRow, actionsRow),
+    h('header', { class: 'dayhead' }, title, subtitle, dayRow, dayChoice, source),
     ringsCard,
     barsCard,
     feedCard,
   );
 
-  function renderSwitch() {
+  /**
+   * Тип дня показываем одной плашкой: раньше рядом висели оба типа, и было непонятно,
+   * какой из них текущий. Смена типа — по нажатию на плашку.
+   */
+  function renderDayType() {
     const { settings, date } = store;
     const activeId = resolveDayTypeId(date, settings);
-    fill(switchRow, ...(settings.dayTypes || []).map((type) => h('button', {
+    const active = dayTypeById(settings, activeId);
+    const isToday = date === todayISO();
+
+    dayChoice.hidden = true;
+    fill(dayRow,
+      h('button', {
+        class: 'badge badge-day', type: 'button',
+        text: `${active.name} · сменить`,
+        'aria-expanded': 'false',
+        onclick: (event) => {
+          dayChoice.hidden = !dayChoice.hidden;
+          event.currentTarget.setAttribute('aria-expanded', String(!dayChoice.hidden));
+        },
+      }),
+      isToday
+        ? null
+        : h('button', {
+          class: 'badge', type: 'button', text: 'К сегодняшнему дню',
+          onclick: () => loadDay(todayISO()),
+        }));
+
+    fill(dayChoice, ...(settings.dayTypes || []).map((type) => h('button', {
       type: 'button',
       text: type.name,
       'aria-pressed': String(type.id === activeId),
@@ -68,7 +85,7 @@ export function mount(container) {
     const entries = byTimeAscending(store.entries);
     if (!entries.length) {
       fill(feed, h('div', { class: 'empty' },
-        'Пока пусто. Нажмите «Записать», чтобы добавить еду.'));
+        'Пока пусто. Нажмите «Добавить» внизу, чтобы записать еду.'));
       totalLine.textContent = '';
       return;
     }
@@ -112,7 +129,7 @@ export function mount(container) {
 
     title.textContent = isToday ? 'Сегодня' : formatDateHuman(date);
     subtitle.textContent = `${weekdayFull(date)}, ${formatDateHuman(date)}${isToday ? '' : ` · ${date}`}`;
-    source.textContent = `${norm.name}: ${round(norm.kcal)} ккал, Б ${round(norm.protein)} / Ж ${round(norm.fat)} / У ${round(norm.carbs)}`;
+    source.textContent = `норма дня: ${round(norm.kcal)} ккал · Б ${round(norm.protein)} / Ж ${round(norm.fat)} / У ${round(norm.carbs)}`;
 
     kcalRing.update({
       value: totals.kcal,
@@ -137,7 +154,7 @@ export function mount(container) {
       bar.update({ value: totals[macro.key], max: norm[macro.key] });
     });
 
-    renderSwitch();
+    renderDayType();
     renderFeed();
 
     if (store.entries.length) {

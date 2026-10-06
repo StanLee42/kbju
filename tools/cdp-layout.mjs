@@ -8,6 +8,7 @@ const debugPort = process.env.CDP_PORT || 9222;
 
 const WIDTHS = [320, 360, 390, 430];
 const SCREENS = [
+  { hash: '#/calendar', name: 'Календарь' },
   { hash: '#/today', name: 'Сегодня' },
   { hash: '#/usage', name: 'Расход' },
   { hash: '#/settings', name: 'Настройки' },
@@ -120,8 +121,12 @@ for (const width of WIDTHS) {
         const rect = tab.getBoundingClientRect();
         return {
           label: tab.textContent.trim(),
-          fits: rect.right <= deviceWidth + 1 && rect.left >= -1,
+          // Вкладка должна быть видна целиком и находиться в полосе нижней панели:
+          // уехавшая на вторую строку вкладка не видна, хотя по ширине проходит.
+          fits: rect.right <= deviceWidth + 1 && rect.left >= -1
+            && rect.bottom <= window.innerHeight + 1 && rect.top >= 0,
           right: Math.round(rect.right),
+          middle: Math.round((rect.top + rect.bottom) / 2),
         };
       });
 
@@ -143,6 +148,12 @@ for (const width of WIDTHS) {
     const data = JSON.parse(metrics || '{}');
     const line = `${width}px ${screen.name}`;
     const tabProblems = (data.tabs || []).filter((tab) => !tab.fits).map((tab) => tab.label);
+    // Все вкладки обязаны стоять в одном ряду: сравниваем середины, потому что кнопка
+    // добавления выше остальных, но стоять должна там же.
+    const middles = (data.tabs || []).map((tab) => tab.middle);
+    if (middles.length && Math.max(...middles) - Math.min(...middles) > 2) {
+      problems.push(`${line}: вкладки разъехались по высоте — часть нижней панели не видна`);
+    }
 
     if (data.layoutWidth > width + 1) {
       problems.push(`${line}: вёрстке нужно ${data.layoutWidth}px при экране ${width}px, `
@@ -211,9 +222,9 @@ if (!parsed.секций) problems.push('на экране настроек не
 // Проверяем, что касания доходят до содержимого, а не гасятся невидимым слоем.
 await send('Page.navigate', { url: `${baseUrl}/#/today` });
 await wait(2000);
-console.log(`\n${await tapCenter('Добавить еду', 'кнопка добавления')}`);
+console.log(`\n${await tapCenter('Добавить', 'кнопка добавления в нижней панели')}`);
 const sheetOpened = await evaluate(`Boolean(document.querySelector('.sheet'))`);
-if (!sheetOpened) problems.push('касание по «Добавить еду» не открыло окно добавления');
+if (!sheetOpened) problems.push('касание по «Добавить» не открыло окно добавления');
 const composerReady = await evaluate(`Boolean(document.querySelector('.composer-input') && document.querySelector('.composer-send'))`);
 if (!composerReady) problems.push('в окне добавления нет поля ввода и кнопки отправки');
 console.log(`окно добавления открылось: ${sheetOpened}, поле ввода на месте: ${composerReady}`);

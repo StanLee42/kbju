@@ -4,11 +4,13 @@ import { isStoragePersistent, requestPersistentStorage } from './db.js';
 import { store, init } from './state.js';
 import { h } from './util.js';
 import { openChatSheet } from './ui/chat.js';
+import * as calendar from './ui/calendar.js';
 import * as settings from './ui/settings.js';
 import * as today from './ui/today.js';
 import * as usage from './ui/usage.js';
 
 const ROUTES = {
+  '/calendar': calendar,
   '/today': today,
   '/usage': usage,
   '/settings': settings,
