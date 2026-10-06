@@ -41,6 +41,7 @@ export function openSheet({ title = '', content, actions = [], onClose } = {}) {
   fill(holder, backdrop, sheet);
   holder.hidden = false;
   document.body.style.overflow = 'hidden';
+  const releaseViewport = watchVisibleArea(holder);
 
   function onKey(event) {
     if (event.key === 'Escape') close();
@@ -63,6 +64,7 @@ export function openSheet({ title = '', content, actions = [], onClose } = {}) {
     holder.hidden = true;
     fill(holder);
     document.body.style.overflow = '';
+    releaseViewport();
     if (activeSheet === api) activeSheet = null;
     if (onClose) onClose();
 
@@ -84,6 +86,38 @@ export function openSheet({ title = '', content, actions = [], onClose } = {}) {
   const api = { close, get opened() { return !closed; } };
   activeSheet = api;
   return api;
+}
+
+/**
+ * Держим окно по видимой части экрана.
+ *
+ * Клавиатура на телефоне уменьшает видимую часть, но область вёрстки при этом не меняется.
+ * Из-за этого окно ввода могло оказаться под клавиатурой, а пересчёт размеров во время её
+ * появления заставлял браузер закрывать клавиатуру — она «появлялась и исчезала».
+ * Поэтому высоту и положение берём у видимой части: тогда содержимое не переезжает,
+ * а окно ввода стоит ровно над клавиатурой.
+ */
+function watchVisibleArea(holder) {
+  const viewport = window.visualViewport;
+  if (!viewport) return () => {};
+
+  const apply = () => {
+    holder.style.height = `${Math.round(viewport.height)}px`;
+    holder.style.top = `${Math.round(viewport.offsetTop)}px`;
+    holder.style.bottom = 'auto';
+  };
+
+  apply();
+  viewport.addEventListener('resize', apply);
+  viewport.addEventListener('scroll', apply);
+
+  return () => {
+    viewport.removeEventListener('resize', apply);
+    viewport.removeEventListener('scroll', apply);
+    holder.style.height = '';
+    holder.style.top = '';
+    holder.style.bottom = '';
+  };
 }
 
 export function toast(text, ms = 1800) {
