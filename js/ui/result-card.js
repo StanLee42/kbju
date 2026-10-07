@@ -5,7 +5,7 @@
 // а расхождение между разговором и снимком в дневнике выглядело бы как ошибка.
 import { PORTION_PRESETS, portionFactor, portionNote, scaleItems, sumItems } from '../portion.js';
 import { fill, h, num, round } from '../util.js';
-import { loadThumb } from '../state.js';
+import { deleteEntry, loadThumb } from '../state.js';
 import { openSheet, toast } from './components/sheet.js';
 
 const CONFIDENCE_LABEL = { high: 'уверенно', medium: 'примерно', low: 'неуверенно' };
@@ -191,7 +191,7 @@ export function createResultCard({
 }
 
 /**
- * Показывает уже сохранённую запись: позиции и то, что модель учла.
+ * Показывает уже сохранённую запись: позиции и то, что модель учла, и даёт её удалить.
  * Снимок показывается, если он был: у записи из слов его нет.
  */
 export async function openEntryDetails(entry) {
@@ -222,11 +222,29 @@ export async function openEntryDetails(entry) {
       ? h('p', { class: 'tiny faint' }, `Уверенность модели: ${CONFIDENCE_LABEL[entry.confidence] || entry.confidence}`)
       : null);
 
-  return openSheet({
+  // Удаление спрашивает подтверждение вторым нажатием: запись в дневнике не должна
+  // пропадать от одного случайного касания.
+  let armed = false;
+  const remove = h('button', {
+    class: 'btn btn-small btn-danger', type: 'button', text: 'Удалить запись',
+    onclick: async () => {
+      if (!armed) {
+        armed = true;
+        remove.textContent = 'Нажмите ещё раз, чтобы удалить';
+        return;
+      }
+      await deleteEntry(entry.id);
+      toast('Запись удалена');
+      sheet.close();
+    },
+  });
+
+  const sheet = openSheet({
     title: entry.name,
-    content,
+    content: h('div', {}, content, h('div', { class: 'chips', style: 'margin-top:16px' }, remove)),
     onClose: () => {
       if (url) URL.revokeObjectURL(url);
     },
   });
+  return sheet;
 }

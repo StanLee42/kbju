@@ -10,6 +10,9 @@ export const store = {
   ready: false,
   settings: null,
   date: todayISO(),
+  // Дата, с которой приложение открылось: по ней понимаем, что сутки сменились,
+  // пока оно лежало в памяти.
+  openedOn: todayISO(),
   entries: [],
   storagePersistent: null,
 };
@@ -65,6 +68,21 @@ export async function loadDay(date) {
   store.date = date;
   store.entries = await db.byIndex('entries', 'date', date).catch(() => []);
   emit();
+}
+
+/**
+ * Переходит на новый день, если сутки сменились, пока приложение было открыто.
+ *
+ * Телефон держит приложение в памяти, и утром в нём всё ещё вчерашний день: тогда и записи
+ * уходили бы во вчерашний дневник, а человек видел бы старую дату как сегодняшнюю.
+ * Прошлый день, открытый нарочно, не трогаем — возвращаемся только если смотрели сегодняшний.
+ */
+export async function refreshToday() {
+  const today = todayISO();
+  if (store.date === today || store.date !== store.openedOn) return false;
+  store.openedOn = today;
+  await loadDay(today);
+  return true;
 }
 
 export async function saveSettings(patch) {

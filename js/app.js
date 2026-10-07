@@ -1,7 +1,7 @@
 // Точка входа: инициализация, маршрутизация между экранами, регистрация
 // service worker и запрос постоянного хранилища.
 import { isStoragePersistent, requestPersistentStorage } from './db.js';
-import { store, init } from './state.js';
+import { refreshToday, store, init } from './state.js';
 import { h } from './util.js';
 import { openChatSheet } from './ui/chat.js';
 import * as calendar from './ui/calendar.js';
@@ -82,7 +82,10 @@ async function main() {
     // запрос к sw.js крошечный, а свежесть важнее. Второй проверки одновременно не бывает.
     let checking = false;
     document.addEventListener('visibilitychange', async () => {
-      if (document.visibilityState !== 'visible' || !registration || checking) return;
+      if (document.visibilityState !== 'visible') return;
+      // Вернулись к приложению утром — показываем новый день, а не вчерашний.
+      await refreshToday().catch(() => {});
+      if (!registration || checking) return;
       checking = true;
       await registration.update().catch(() => {});
       checking = false;
