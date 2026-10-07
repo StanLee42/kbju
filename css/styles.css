@@ -333,6 +333,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
    На этом уже спотыкались дважды: со шторкой и с выбором типа дня. */
 .chips[hidden] { display: none; }
 
+/* ---------- Объединение записей дня ---------- */
+
+.feed-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* Отмеченная запись должна отличаться от остальных без подсказок. */
+.entry-marked {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.merge-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.merge-bar:empty { display: none; }
+
 /* ---------- Плашка дня и календарь ---------- */
 
 /* Тип дня показываем одной плашкой: рядом два типа путали — непонятно, какой текущий. */

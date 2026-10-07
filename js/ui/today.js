@@ -2,8 +2,10 @@
 import { MACROS, byTimeAscending, dayTypeById, remaining, resolveDayTypeId } from '../norm.js';
 import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull } from '../util.js';
 import { createBar } from './components/bar.js';
+import { toast } from './components/sheet.js';
 import { createRing } from './components/ring.js';
-import { loadDay, store, setDayTypeOverride, subscribe } from '../state.js';
+import { addEntry, deleteEntry, loadDay, store, setDayTypeOverride, subscribe } from '../state.js';
+import { mergeEntries } from '../merge.js';
 import { openAddSheet } from './add.js';
 import { openEntryDetails } from './result-card.js';
 
@@ -33,9 +35,15 @@ export function mount(container) {
 
   const barsCard = h('section', { class: 'card' }, bars.map((bar) => bar.element));
 
+  // Отметка записей для объединения: включён ли режим и что отмечено.
+  const selection = { active: false, ids: new Set() };
+  const feedHead = h('div', { class: 'feed-head' });
+  const mergeBar = h('div', { class: 'merge-bar' });
+
   const feedCard = h('section', { class: 'card' },
-    h('h2', { class: 'card-title', text: 'Что съедено' }),
+    feedHead,
     feed,
+    mergeBar,
     totalLine);
 
   container.append(
@@ -81,24 +89,105 @@ export function mount(container) {
     })));
   }
 
+  /** Выход из режима отметки: он не должен переживать смену дня или уход с экрана. */
+  function stopSelection() {
+    selection.active = false;
+    selection.ids.clear();
+  }
+
+  /** Объединяет отмеченные записи в одну: суммы складываются, время — от самой ранней. */
+  async function mergeSelected() {
+    const entries = byTimeAscending(store.entries);
+    const chosen = entries.filter((entry) => selection.ids.has(entry.id));
+    if (chosen.length < 2) {
+      toast('Отметьте хотя бы две записи');
+      return;
+    }
+
+    const merged = mergeEntries(chosen);
+    if (!merged) return;
+
+    // Сначала убираем строки, потом записываем объединённую: так дневник не покажет
+    // на мгновение и старое, и новое.
+    for (const entry of chosen) await deleteEntry(entry.id);
+    await addEntry(merged);
+
+    stopSelection();
+    toast(`Объединено записей: ${chosen.length}`);
+    renderFeed();
+  }
+
+  function renderFeedHead(entries) {
+    fill(feedHead,
+      h('h2', { class: 'card-title', style: 'margin:0' }, 'Что съедено'),
+      selection.active
+        ? h('button', {
+          class: 'btn btn-small', type: 'button', text: 'Отмена',
+          onclick: () => {
+            stopSelection();
+            renderFeed();
+          },
+        })
+        : (entries.length >= 2
+          ? h('button', {
+            class: 'btn btn-small', type: 'button', text: 'Объединить',
+            onclick: () => {
+              selection.active = true;
+              selection.ids.clear();
+              renderFeed();
+            },
+          })
+          : null));
+  }
+
+  function renderMergeBar() {
+    if (!selection.active) {
+      fill(mergeBar);
+      return;
+    }
+    fill(mergeBar,
+      h('div', { class: 'small muted', text: `Отмечено: ${selection.ids.size}` }),
+      h('button', {
+        class: 'btn-primary draft-save', type: 'button', text: 'Объединить отмеченные',
+        disabled: selection.ids.size < 2,
+        onclick: mergeSelected,
+      }));
+  }
+
   function renderFeed() {
     const entries = byTimeAscending(store.entries);
     if (!entries.length) {
+      fill(feedHead, h('h2', { class: 'card-title', style: 'margin:0' }, 'Что съедено'));
       fill(feed, h('div', { class: 'empty' },
         'Пока пусто. Нажмите «Добавить» внизу, чтобы записать еду.'));
+      fill(mergeBar);
       totalLine.textContent = '';
       return;
     }
+    renderFeedHead(entries);
+    renderMergeBar();
 
     fill(feed, ...entries.map((entry) => {
       const portion = PORTION_LABEL[entry.portion] || '';
       const sub = [entry.grams ? `${round(entry.grams)} г` : '', portion, entry.portionNote]
         .filter(Boolean).join(' · ');
-      // Записи с разбором открываются позициями, ручные — формой правки.
-      const open = () => (['photo', 'chat'].includes(entry.source) && entry.items?.length
-        ? openEntryDetails(entry)
-        : openAddSheet({ entry }));
-      return h('div', { class: 'entry', onclick: open },
+      const marked = selection.ids.has(entry.id);
+      // В режиме отметки касание выбирает запись для объединения, а не открывает её.
+      const open = () => {
+        if (selection.active) {
+          if (marked) selection.ids.delete(entry.id);
+          else selection.ids.add(entry.id);
+          renderFeed();
+          return;
+        }
+        if (['photo', 'chat', 'merged'].includes(entry.source) && entry.items?.length) openEntryDetails(entry);
+        else openAddSheet({ entry });
+      };
+      return h('div', {
+        class: `entry${marked ? ' entry-marked' : ''}`,
+        'aria-pressed': String(marked),
+        onclick: open,
+      },
         h('div', { class: 'entry-time', text: formatTime(entry.time) }),
         h('div', { class: 'grow' },
           h('div', { class: 'entry-name', text: entry.name }),
