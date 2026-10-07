@@ -4,6 +4,7 @@ import { isStoragePersistent, requestPersistentStorage } from './db.js';
 import { refreshToday, store, init } from './state.js';
 import { h } from './util.js';
 import { BUILD_VERSION } from './version.js';
+import { alignWithServer } from './update.js';
 import { openChatSheet } from './ui/chat.js';
 import * as calendar from './ui/calendar.js';
 import * as settings from './ui/settings.js';
@@ -96,6 +97,10 @@ async function main() {
       };
       controller.postMessage({ type: 'version' }, [channel.port2]);
     });
+
+    // Если на сервере лежит другая сборка, доводим обновление до конца сами: иначе
+    // человек остаётся на старых экранах, сколько бы раз ни нажимал кнопку.
+    alignWithServer().catch(() => {});
 
     if (serviceWorkerVersion && serviceWorkerVersion !== BUILD_VERSION) {
       // Один раз на версию службы: иначе перезагрузка могла бы зациклиться.

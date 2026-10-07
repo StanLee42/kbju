@@ -6,6 +6,7 @@ import { dayTypeById, kcalFromMacros, macrosForKcal, resolveDayTypeId } from '..
 import { saveSettings, store } from '../state.js';
 import { bytesHuman, fill, h, num, round, todayISO } from '../util.js';
 import { BUILD_VERSION } from '../version.js';
+import { serverVersion, updateAndReload } from '../update.js';
 import { toast } from './components/sheet.js';
 import { DEFAULT_PRICES } from '../usage.js';
 import { openNormsChat } from './norms-chat.js';
@@ -87,14 +88,9 @@ export function mount(container) {
       class: 'btn btn-small', type: 'button', text: 'Обновить приложение',
       onclick: async () => {
         toast('Проверяем обновление…');
-        try {
-          const registration = await navigator.serviceWorker?.getRegistration?.();
-          if (registration) await registration.update();
-        } catch {
-          // Даже если проверка не удалась, перезагрузка полезна: она берёт
-          // файлы из сети, если они там новее.
-        }
-        setTimeout(() => location.reload(), 600);
+        // Перезагружаемся после того, как новая служба возьмёт управление: иначе
+        // страницу снова отдаст старая из своего кэша, и обновление не случится.
+        await updateAndReload();
       },
     });
 

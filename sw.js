@@ -28,7 +28,10 @@ self.addEventListener('message', (event) => {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(VERSION)
-      .then((cache) => cache.addAll(SHELL))
+      // Кладём файлы по одному: если один не отдался, установка всё равно состоится.
+      // Иначе единственная неудачная загрузка оставляла бы телефон на старой сборке навсегда,
+      // и обновление не доезжало бы, сколько бы раз его ни запускали.
+      .then((cache) => Promise.allSettled(SHELL.map((path) => cache.add(path))))
       .then(() => self.skipWaiting())
   );
 });
