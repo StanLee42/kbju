@@ -25,7 +25,7 @@ function planLine(title, day) {
     ` — ${round(day.kcal)} ккал · Б ${round(day.protein)} · Ж ${round(day.fat)} · У ${round(day.carbs)}`);
 }
 
-export function openNormsChat() {
+export function openNormsChat({ onApplied = null } = {}) {
   const settings = store.settings || {};
   const providerConfig = settings.provider || {};
   const keyMissing = !providerConfig.key;
@@ -292,7 +292,22 @@ export function openNormsChat() {
       };
     });
     await saveSettings({ dayTypes: types });
+
+    // Показываем, что именно записали: числа могли совпасть с прежними, и тогда
+    // «ничего не изменилось» — это не ошибка, а отсутствие разницы.
+    const applied = types
+      .filter((type) => DAY_TYPE_SOURCE[type.id])
+      .map((type) => `${type.name}: ${round(type.kcal)} ккал · Б ${round(type.protein)} `
+        + `· Ж ${round(type.fat)} · У ${round(type.carbs)}`)
+      .join('; ');
+    state.messages.push({
+      role: 'assistant',
+      answer: { comment: `Записал в дни: ${applied}. Если день сегодня другой по расписанию, `
+        + 'на экране дня видна его норма — откройте нужный день или тип в настройках.' },
+    });
+    render();
     toast('Нормы обновлены');
+    if (onApplied) onApplied();
     sheet.close();
   }
 
