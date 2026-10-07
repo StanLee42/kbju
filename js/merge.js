@@ -66,3 +66,38 @@ export function mergeEntries(entries = []) {
     cost: round(sorted.reduce((acc, entry) => acc + (Number(entry.cost) || 0), 0), 5),
   };
 }
+
+/**
+ * Разбирает запись на составляющие — по одной на каждую позицию.
+ *
+ * Нужно, чтобы посмотреть, из чего собран приём пищи: какая именно позиция тянет день
+ * в перебор. Время у всех составляющих остаётся тем же, что у исходной записи: точнее
+ * мы его всё равно не знаем, а придумывать не будем.
+ */
+export function splitEntry(entry) {
+  const items = Array.isArray(entry?.items) ? entry.items.filter(Boolean) : [];
+  if (items.length < 2) return [];
+
+  return items.map((item) => ({
+    date: entry.date || null,
+    time: entry.time || '',
+    name: String(item.name || '').trim() || 'Позиция',
+    grams: round(Number(item.grams) || 0, DIGITS),
+    kcal: round(Number(item.kcal) || 0, DIGITS),
+    protein: round(Number(item.protein) || 0, DIGITS),
+    fat: round(Number(item.fat) || 0, DIGITS),
+    carbs: round(Number(item.carbs) || 0, DIGITS),
+    comment: '',
+    source: 'split',
+    items: [item],
+    thumbId: null,
+    basis: entry.basis || null,
+    confidence: entry.confidence || null,
+    assumptions: '',
+    portion: 'normal',
+    portionNote: '',
+    base: null,
+    // Стоимость разговора относилась ко всему приёму: при разделении её не размазываем.
+    cost: 0,
+  }));
+}

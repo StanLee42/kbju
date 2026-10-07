@@ -3,7 +3,6 @@ import { MACROS, byTimeAscending, dayTypeById, remaining, resolveDayTypeId } fro
 import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull } from '../util.js';
 import { createBar } from './components/bar.js';
 import { toast } from './components/sheet.js';
-import { createRing } from './components/ring.js';
 import { addEntry, deleteEntry, loadDay, store, setDayTypeOverride, subscribe } from '../state.js';
 import { mergeEntries } from '../merge.js';
 import { openAddSheet } from './add.js';
@@ -18,20 +17,10 @@ export function mount(container) {
   const dayRow = h('div', { class: 'day-badge-row', style: 'margin-top:10px' });
   const dayChoice = h('div', { class: 'chips', style: 'margin-top:8px', hidden: true });
 
-  const kcalRing = createRing({ size: 154, stroke: 13, color: 'var(--kcal)' });
-  const macroRings = MACROS.slice(1).map((macro) => createRing({
-    size: 78, stroke: 8, color: macro.color, mini: true,
-  }));
-
   const bars = MACROS.map((macro) => createBar({ label: macro.label, color: macro.color, unit: macro.unit }));
 
   const feed = h('div', {});
   const totalLine = h('div', { class: 'total-line' });
-
-  const ringsCard = h('section', { class: 'card' },
-    h('div', { class: 'rings' },
-      kcalRing.element,
-      h('div', { class: 'rings-small' }, macroRings.map((ring) => ring.element))));
 
   const barsCard = h('section', { class: 'card' }, bars.map((bar) => bar.element));
 
@@ -48,7 +37,8 @@ export function mount(container) {
 
   container.append(
     h('header', { class: 'dayhead' }, title, subtitle, dayRow, dayChoice, source),
-    ringsCard,
+    // Круговых диаграмм здесь больше нет: они повторяли полоски и путали числами.
+    // Полоски ниже показывают норму, съеденное, остаток и перебор — этого достаточно.
     barsCard,
     feedCard,
   );
@@ -67,7 +57,7 @@ export function mount(container) {
     fill(dayRow,
       h('button', {
         class: 'badge badge-day', type: 'button',
-        text: `${active.name} · сменить`,
+        text: active.name,
         'aria-expanded': 'false',
         onclick: (event) => {
           dayChoice.hidden = !dayChoice.hidden;
@@ -82,6 +72,7 @@ export function mount(container) {
         }));
 
     fill(dayChoice, ...(settings.dayTypes || []).map((type) => h('button', {
+      class: 'badge badge-option',
       type: 'button',
       text: type.name,
       'aria-pressed': String(type.id === activeId),
@@ -219,24 +210,6 @@ export function mount(container) {
     title.textContent = isToday ? 'Сегодня' : formatDateHuman(date);
     subtitle.textContent = `${weekdayFull(date)}, ${formatDateHuman(date)}${isToday ? '' : ` · ${date}`}`;
     source.textContent = `норма дня: ${round(norm.kcal)} ккал · Б ${round(norm.protein)} / Ж ${round(norm.fat)} / У ${round(norm.carbs)}`;
-
-    kcalRing.update({
-      value: totals.kcal,
-      max: norm.kcal,
-      caption: left.kcal >= 0
-        ? `осталось ${round(left.kcal)}`
-        : `перебор ${Math.abs(round(left.kcal))}`,
-    });
-
-    MACROS.slice(1).forEach((macro, index) => {
-      const macroLeft = left[macro.key];
-      macroRings[index].update({
-        value: totals[macro.key],
-        max: norm[macro.key],
-        unit: 'г',
-        caption: macroLeft >= 0 ? `${round(macroLeft)} г` : `+${Math.abs(round(macroLeft))}`,
-      });
-    });
 
     bars.forEach((bar, index) => {
       const macro = MACROS[index];

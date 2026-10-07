@@ -5,7 +5,8 @@
 // а расхождение между разговором и снимком в дневнике выглядело бы как ошибка.
 import { PORTION_PRESETS, portionFactor, portionNote, scaleItems, sumItems } from '../portion.js';
 import { fill, h, num, round } from '../util.js';
-import { deleteEntry, loadThumb } from '../state.js';
+import { addEntry, deleteEntry, loadThumb } from '../state.js';
+import { splitEntry } from '../merge.js';
 import { openSheet, toast } from './components/sheet.js';
 
 const CONFIDENCE_LABEL = { high: 'уверенно', medium: 'примерно', low: 'неуверенно' };
@@ -83,20 +84,19 @@ export function createResultCard({
       h('div', {},
         h('b', { text: `${round(totals.kcal)} ккал` }),
         ` · Б ${round(totals.protein)} · Ж ${round(totals.fat)} · У ${round(totals.carbs)}`),
-      h('div', { class: 'tiny faint', style: 'margin-top:4px' },
+      h('div', { class: 'small faint', style: 'margin-top:4px' },
         `Вес порции ${round(totals.grams)} г`
         + (value === 1 ? '' : ` (множитель ×${round(value, 2)})`)));
   }
 
   function itemRow(item, index) {
-    const field = (key, label, width) => h('label', { class: 'field', style: 'margin:0' },
+    const field = (key, label) => h('label', { class: 'field field-compact', style: 'margin:0' },
       h('span', { class: 'field-label', text: label }),
       h('input', {
         type: key === 'name' ? 'text' : 'number',
         spellcheck: false,
         inputmode: key === 'name' ? undefined : 'decimal',
         value: item[key],
-        style: width ? `width:${width}` : '',
         oninput: (event) => {
           item[key] = key === 'name' ? event.target.value : num(event.target.value);
           renderTotals();
@@ -105,17 +105,16 @@ export function createResultCard({
 
     return h('div', { style: 'padding:10px 0;border-bottom:1px solid var(--line)' },
       field('name', 'Позиция'),
-      h('div', { class: 'grid-4', style: 'margin-top:8px' },
+      // Пять чисел в один ряд: окошки получаются узкими и по делу, а не полэкрана на каждое.
+      h('div', { class: 'grid-5', style: 'margin-top:8px' },
         field('grams', 'Граммы'),
         field('kcal', 'Ккал'),
         field('protein', 'Б'),
-        field('fat', 'Ж')),
-      h('div', { class: 'grid-4', style: 'margin-top:8px' },
-        field('carbs', 'У'),
-        h('div', {}),
-        h('div', {}),
+        field('fat', 'Ж'),
+        field('carbs', 'У')),
+      h('div', { class: 'chips', style: 'margin-top:8px' },
         h('button', {
-          class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать',
+          class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать позицию',
           onclick: () => {
             state.items.splice(index, 1);
             render();
@@ -150,7 +149,7 @@ export function createResultCard({
     fill(body, 
       h('div', { class: 'small' },
         h('b', { text: analysis.dish }),
-        h('div', { class: 'tiny faint', style: 'margin-top:2px' }, sourceLine(analysis, origin))),
+        h('div', { class: 'small faint', style: 'margin-top:2px' }, sourceLine(analysis, origin))),
       h('h3', { class: 'card-title', style: 'margin-top:14px' }, 'Сколько съедено'),
       portionRow,
       customInput,
@@ -158,7 +157,7 @@ export function createResultCard({
       h('div', {}, state.items.map((item, index) => itemRow(item, index))),
       totalsNode,
       analysis.assumptions
-        ? h('p', { class: 'tiny faint', style: 'margin-top:10px' }, `Что учтено: ${analysis.assumptions}`)
+        ? h('p', { class: 'small faint', style: 'margin-top:10px' }, `Что учтено: ${analysis.assumptions}`)
         : null,
       onSave || onRetry
         ? h('div', { class: 'chips', style: 'margin-top:16px' },
@@ -180,7 +179,7 @@ export function createResultCard({
             ? h('button', { class: 'btn btn-small', type: 'button', text: retryLabel, onclick: onRetry })
             : null)
         : null,
-      h('p', { class: 'tiny faint', style: 'margin-top:8px' },
+      h('p', { class: 'small faint', style: 'margin-top:8px' },
         `Стоимость этого разбора: ${(analysis.cost || 0).toFixed(5)} $ (оценка)`));
 
     renderTotals();
@@ -222,6 +221,26 @@ export async function openEntryDetails(entry) {
       ? h('p', { class: 'tiny faint' }, `Уверенность модели: ${CONFIDENCE_LABEL[entry.confidence] || entry.confidence}`)
       : null);
 
+  // Разбор на составляющие: приём пищи распадается на отдельные позиции. Нужно, чтобы
+  // посмотреть, какая именно позиция тянет день в перебор.
+  const actions = [];
+  if (items.length >= 2) {
+    actions.push(h('button', {
+      class: 'btn btn-small', type: 'button', text: 'Разделить на составляющие',
+      onclick: async () => {
+        const parts = splitEntry(entry);
+        if (!parts.length) {
+          toast('Разделять нечего');
+          return;
+        }
+        await deleteEntry(entry.id);
+        for (const part of parts) await addEntry(part);
+        toast(`Разделено на ${parts.length} позиции`);
+        sheet.close();
+      },
+    }));
+  }
+
   // Удаление спрашивает подтверждение вторым нажатием: запись в дневнике не должна
   // пропадать от одного случайного касания.
   let armed = false;
@@ -241,7 +260,7 @@ export async function openEntryDetails(entry) {
 
   const sheet = openSheet({
     title: entry.name,
-    content: h('div', {}, content, h('div', { class: 'chips', style: 'margin-top:16px' }, remove)),
+    content: h('div', {}, content, h('div', { class: 'chips', style: 'margin-top:16px' }, remove, ...actions)),
     onClose: () => {
       if (url) URL.revokeObjectURL(url);
     },

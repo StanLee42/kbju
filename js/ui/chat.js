@@ -11,7 +11,6 @@ import { addEntry, saveThumb, store } from '../state.js';
 import { sumItems } from '../portion.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, nowTime, round } from '../util.js';
-import { openAddSheet } from './add.js';
 import { createComposer } from './components/composer.js';
 import { openSheet, toast } from './components/sheet.js';
 import { createResultCard } from './result-card.js';
@@ -42,14 +41,6 @@ export function openChatSheet({ date = null } = {}) {
       : null,
     note: 'Разговор можно вести сколько нужно: блюдо попадает в дневник только по кнопке '
       + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится.',
-    extra: h('div', { class: 'chips', style: 'margin-top:8px' },
-      h('button', {
-        class: 'btn btn-small btn-ghost', type: 'button', text: 'Ввести числа вручную',
-        onclick: () => {
-          sheet.close();
-          openAddSheet({ date: targetDate });
-        },
-      })),
     onSend: async ({ text, photo }) => {
       const before = history();
       state.messages.push({

@@ -333,6 +333,23 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
    На этом уже спотыкались дважды: со шторкой и с выбором типа дня. */
 .chips[hidden] { display: none; }
 
+/* ---------- Компактные поля позиции ---------- */
+
+/* Пять чисел позиции в один ряд: окошки узкие и по делу, а не полэкрана на каждое. */
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+
+.field-compact input { padding: 8px 8px; font-size: 15px; }
+.field-compact .field-label { font-size: 11px; margin-bottom: 3px; }
+
+/* Варианты типа дня — такие же плашки, как сама кнопка: раньше они выглядели чужими. */
+.badge[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-elev-2));
+  font-weight: 600;
+}
+
+.badge-option { background: var(--bg-elev-2); }
+
 /* ---------- Объединение записей дня ---------- */
 
 .feed-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

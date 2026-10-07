@@ -2,12 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { mergeEntries } from '../js/merge.js';
+import { mergeEntries, splitEntry } from '../js/merge.js';
 
 const rows = [
-  { id: 'b', date: '2026-10-07', time: '13:40', name: 'Курица', grams: 120, kcal: 300, protein: 25, fat: 16, carbs: 4, comment: '', items: [{ name: 'Курица', grams: 120 }], cost: 0.0002 },
-  { id: 'a', date: '2026-10-07', time: '13:10', name: 'Салат', grams: 200, kcal: 110, protein: 3, fat: 8, carbs: 8, comment: 'без соуса', items: [{ name: 'Салат', grams: 200 }], cost: 0.0001 },
-  { id: 'c', date: '2026-10-07', time: '13:55', name: 'Хлеб', grams: 30, kcal: 70, protein: 2, fat: 1, carbs: 14, comment: 'ржаной', items: [{ name: 'Хлеб', grams: 30 }], cost: 0 },
+  { id: 'b', date: '2026-10-07', time: '13:40', name: 'Курица', grams: 120, kcal: 300, protein: 25, fat: 16, carbs: 4, comment: '', items: [{ name: 'Курица', grams: 120, kcal: 300, protein: 25, fat: 16, carbs: 4 }], cost: 0.0002 },
+  { id: 'a', date: '2026-10-07', time: '13:10', name: 'Салат', grams: 200, kcal: 110, protein: 3, fat: 8, carbs: 8, comment: 'без соуса', items: [{ name: 'Салат', grams: 200, kcal: 110, protein: 3, fat: 8, carbs: 8 }], cost: 0.0001 },
+  { id: 'c', date: '2026-10-07', time: '13:55', name: 'Хлеб', grams: 30, kcal: 70, protein: 2, fat: 1, carbs: 14, comment: 'ржаной', items: [{ name: 'Хлеб', grams: 30, kcal: 70, protein: 2, fat: 1, carbs: 14 }], cost: 0 },
 ];
 
 test('суммы складываются по всем строкам', () => {
@@ -74,4 +74,27 @@ test('записи без времени не мешают: берётся са�
   ]);
   assert.equal(merged.time, '09:00');
   assert.equal(merged.kcal, 200);
+});
+
+test('объединённую запись можно разобрать на составляющие', () => {
+  const merged = mergeEntries(rows);
+  const parts = splitEntry(merged);
+
+  assert.equal(parts.length, 3, 'по одной записи на каждую позицию');
+  assert.deepEqual(parts.map((part) => part.name), ['Салат', 'Курица', 'Хлеб']);
+  assert.deepEqual(parts.map((part) => part.kcal), [110, 300, 70]);
+  assert.equal(parts[0].time, merged.time, 'время остаётся тем же: точнее мы его не знаем');
+  assert.equal(parts[0].source, 'split');
+  assert.equal(parts[0].grams, 200);
+
+  // Сумма составляющих равна исходной записи — иначе разбор терял бы еду.
+  const back = parts.reduce((acc, part) => acc + part.kcal, 0);
+  assert.equal(Math.round(back), Math.round(merged.kcal));
+});
+
+test('разбирать нечего, если позиция одна или их нет', () => {
+  assert.deepEqual(splitEntry({ items: [{ name: 'Салат', kcal: 100 }] }), []);
+  assert.deepEqual(splitEntry({ items: [] }), []);
+  assert.deepEqual(splitEntry({}), []);
+  assert.deepEqual(splitEntry(null), []);
 });
