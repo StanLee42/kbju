@@ -3,9 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  DEFAULT_SETTINGS, dayTypeById, remaining, resolveDayTypeId, scheduledDayTypeId, sumEntries,
-} from '../js/norm.js';
+import { DEFAULT_SETTINGS, dayTypeById, kcalFromMacros, macrosForKcal, remaining, resolveDayTypeId, scheduledDayTypeId, sumEntries } from '../js/norm.js';
 
 const settings = structuredClone(DEFAULT_SETTINGS);
 
@@ -85,4 +83,34 @@ test('пустой день даёт нули и полный остаток', (
   assert.deepEqual(totals, { kcal: 0, protein: 0, fat: 0, carbs: 0 });
   assert.deepEqual(remaining({ kcal: 2000, protein: 130, fat: 65, carbs: 200 }, totals),
     { kcal: 2000, protein: 130, fat: 65, carbs: 200 });
+});
+
+test('калории по макросам считаются по 4 и 9 ккал на грамм', () => {
+  assert.equal(kcalFromMacros({ protein: 100, fat: 50, carbs: 200 }), 400 + 450 + 800);
+  assert.equal(kcalFromMacros({}), 0);
+});
+
+test('правка калорий сохраняет соотношение БЖУ', () => {
+  const было = { protein: 130, fat: 65, carbs: 200 };
+  const стало = macrosForKcal(было, 1800);
+
+  // Калории после пересчёта совпадают с заданными (в пределах округления до десятых).
+  const калории = kcalFromMacros(стало);
+  assert.ok(Math.abs(калории - 1800) < 1, `вышло ${калории}`);
+
+  // Соотношение сохранено: каждый макрос изменился во столько же раз.
+  const factor = стало.protein / было.protein;
+  assert.ok(Math.abs(стало.fat / было.fat - factor) < 0.01);
+  assert.ok(Math.abs(стало.carbs / было.carbs - factor) < 0.01);
+});
+
+test('увеличение калорий увеличивает все макросы', () => {
+  const стало = macrosForKcal({ protein: 100, fat: 50, carbs: 150 }, 2600);
+  assert.ok(стало.protein > 100 && стало.fat > 50 && стало.carbs > 150);
+});
+
+test('нули и пустое не ломают пересчёт', () => {
+  assert.deepEqual(macrosForKcal({ protein: 0, fat: 0, carbs: 0 }, 2000), { protein: 0, fat: 0, carbs: 0 });
+  assert.deepEqual(macrosForKcal({}, 2000), { protein: 0, fat: 0, carbs: 0 });
+  assert.deepEqual(macrosForKcal({ protein: 100, fat: 50, carbs: 150 }, 0), { protein: 100, fat: 50, carbs: 150 });
 });

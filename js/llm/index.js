@@ -4,9 +4,10 @@
 // Никаких «HTTP 402» в интерфейс не попадает.
 import { createDeepSeek } from './deepseek.js';
 import { KINDS, describeError, normalizeThrown, providerError } from './errors.js';
-import { parseAnalysis, parseImpedance } from './parse.js';
+import { parseAnalysis, parseImpedance, parseNorms } from './parse.js';
 import {
   CHAT_SYSTEM_PROMPT, CHAT_USER_PROMPT,
+  NORMS_SYSTEM_PROMPT,
   IMPEDANCE_SYSTEM_PROMPT, IMPEDANCE_USER_PROMPT,
   MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS_RETRY,
   SYSTEM_PROMPT, USER_PROMPT,
@@ -125,6 +126,32 @@ export async function analyzeChat({ provider, text = null, image = null, draft =
     image,
     text: parts.join('\n\n'),
     parse: parseAnalysis,
+  });
+}
+
+/**
+ * Разговор о нормах: человек обсуждает калории и БЖУ, модель меняет рычаги.
+ *
+ * Числа считает приложение по этим рычагам — модель их не считает и не называет.
+ */
+export async function discussNorms({ provider, text = null, image = null, current = null, history = [] }) {
+  const parts = [];
+  if (current) {
+    parts.push(`Текущие нормы и рычаги (JSON):\n${JSON.stringify(current)}`);
+  }
+  const transcript = (history || [])
+    .map((message) => `${message.role === 'user' ? 'Человек' : 'Ты'}: ${String(message.text || '').trim() || 'прислал снимок'}`)
+    .join('\n');
+  if (transcript) parts.push(`Разговор до этого:\n${transcript}`);
+  parts.push(`Новое сообщение человека: ${text || '(только снимок, без слов)'}`);
+
+  return runWithRetry({
+    provider,
+    system: NORMS_SYSTEM_PROMPT,
+    user: 'Разбери это сообщение про нормы и верни изменения строго по схеме.',
+    image,
+    text: parts.join('\n\n'),
+    parse: parseNorms,
   });
 }
 

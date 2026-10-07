@@ -6,12 +6,13 @@
 //    последним сообщением: разговор можно листать, а числа остаются перед глазами.
 // 2. Запись в дневник — только по кнопке. Разговор сам ничего не сохраняет.
 import { analyzeChat, createProvider, describeError } from '../llm/index.js';
-import { pickImage, prepareForApi, makeThumbnail } from '../media/image.js';
+import { makeThumbnail } from '../media/image.js';
 import { addEntry, saveThumb, store } from '../state.js';
 import { sumItems } from '../portion.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, nowTime, round } from '../util.js';
 import { openAddSheet } from './add.js';
+import { createComposer } from './components/composer.js';
 import { openSheet, toast } from './components/sheet.js';
 import { createResultCard } from './result-card.js';
 
@@ -26,25 +27,41 @@ export function openChatSheet({ date = null } = {}) {
     draft: null, // последний разбор: уходит модели следующим сообщением
     current: null, // текущие значения: позиции, итог, множитель (их и записываем)
     cost: 0,
-    photo: null,
-    photoPreview: null,
-    text: '',
-    busy: false,
   };
-
-  // Поле ввода создаём один раз и дальше только меняем подсказку: если пересоздавать его
-  // на каждой перерисовке, клавиатура на телефоне закрывается прямо во время набора.
-  const messageInput = h('textarea', {
-    class: 'composer-input', rows: 2,
-    spellcheck: false,
-    oninput: (event) => { state.text = event.target.value; },
-  });
 
   const thread = h('div', { class: 'thread' });
   const draftBar = h('div', { class: 'draft-bar', hidden: true });
-  const composer = h('div', {});
-  const host = h('div', {}, thread, draftBar, composer);
+  const host = h('div', {}, thread, draftBar);
   const sheet = openSheet({ title: 'Добавить еду', content: host });
+
+  const input = createComposer({
+    placeholder: 'Что вы съели',
+    placeholderWithDraft: 'Уточните, если нужно',
+    keyWarning: keyMissing
+      ? 'Ключ провайдера не заполнен: посчитать не получится. Заполните ключ в настройках.'
+      : null,
+    note: 'Разговор можно вести сколько нужно: блюдо попадает в дневник только по кнопке '
+      + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится.',
+    extra: h('div', { class: 'chips', style: 'margin-top:8px' },
+      h('button', {
+        class: 'btn btn-small btn-ghost', type: 'button', text: 'Ввести числа вручную',
+        onclick: () => {
+          sheet.close();
+          openAddSheet({ date: targetDate });
+        },
+      })),
+    onSend: async ({ text, photo }) => {
+      const before = history();
+      state.messages.push({
+        role: 'user',
+        text,
+        photo: photo ? `data:${photo.mime};base64,${photo.base64}` : null,
+      });
+      render();
+      await ask({ text, photo, history: before });
+    },
+  });
+  host.append(input.element);
 
   // --- переписка ---
 
@@ -129,85 +146,16 @@ export function openChatSheet({ date = null } = {}) {
       }));
   }
 
-  function renderComposer() {
-    const chips = [
-      h('button', {
-        class: 'btn btn-small', type: 'button', text: '📷 Снять',
-        disabled: state.busy, onclick: () => attach(true),
-      }),
-      h('button', {
-        class: 'btn btn-small', type: 'button', text: '🖼 Из галереи',
-        disabled: state.busy, onclick: () => attach(false),
-      }),
-    ];
-
-    const attached = state.photoPreview
-      ? h('div', { class: 'attached' },
-        h('img', { class: 'msg-photo', src: state.photoPreview, alt: 'снимок' }),
-        h('button', {
-          class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать снимок',
-          onclick: () => {
-            state.photo = null;
-            state.photoPreview = null;
-            renderComposer();
-          },
-        }))
-      : null;
-
-    messageInput.placeholder = state.current ? 'Уточните, если нужно' : 'Что вы съели';
-    if (messageInput.value !== state.text) messageInput.value = state.text;
-
-    fill(composer,
-      attached,
-      messageInput,
-      h('div', { class: 'composer-row' },
-        h('div', { class: 'chips' }, chips),
-        h('button', {
-          class: 'btn-primary composer-send', type: 'button',
-          text: state.busy ? 'Считаю…' : 'Отправить',
-          disabled: state.busy,
-          onclick: send,
-        })),
-      keyMissing
-        ? h('p', { class: 'small', style: 'margin-top:8px;color:var(--over)' },
-          'Ключ провайдера не заполнен: посчитать не получится. Заполните ключ в настройках.')
-        : null,
-      h('div', { class: 'chips', style: 'margin-top:8px' },
-        h('button', {
-          class: 'btn btn-small btn-ghost', type: 'button', text: 'Ввести числа вручную',
-          onclick: () => {
-            sheet.close();
-            openAddSheet({ date: targetDate });
-          },
-        })),
-      h('p', { class: 'tiny faint', style: 'margin-top:8px' },
-        'Разговор можно вести сколько нужно: блюдо попадает в дневник только по кнопке '
-        + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится.'));
-  }
-
   function render() {
     // Порядок важен: карточка в переписке сообщает текущие значения, и полоса
     // строится уже по ним.
     renderThread();
     renderDraftBar();
-    renderComposer();
+    input.setHasDraft(Boolean(state.current));
     thread.scrollTop = thread.scrollHeight;
   }
 
   // --- шаги ---
-
-  async function attach(fromCamera) {
-    const file = await pickImage({ camera: fromCamera });
-    if (!file) return;
-    try {
-      const prepared = await prepareForApi(file);
-      state.photo = { file, base64: prepared.base64, mime: prepared.mime };
-      state.photoPreview = `data:${prepared.mime};base64,${prepared.base64}`;
-      renderComposer();
-    } catch (error) {
-      toast(`Снимок не удалось прочитать: ${error.message || error}`);
-    }
-  }
 
   /** Прежние сообщения словами: без них модель спрашивала бы одно и то же по кругу. */
   function history() {
@@ -215,27 +163,6 @@ export function openChatSheet({ date = null } = {}) {
       role: message.role,
       text: message.text || message.analysis?.question || '',
     }));
-  }
-
-  async function send() {
-    const text = state.text.trim();
-    if (!text && !state.photo) {
-      toast('Напишите словами или приложите снимок');
-      return;
-    }
-    if (keyMissing) {
-      toast('Вставьте ключ провайдера в настройках');
-      return;
-    }
-
-    const photo = state.photo;
-    const before = history();
-    state.messages.push({ role: 'user', text, photo: state.photoPreview });
-    state.text = '';
-    state.photo = null;
-    state.photoPreview = null;
-    render();
-    await ask({ text, photo, history: before });
   }
 
   /** Повторяет неудачный запрос: то же сообщение и тот же разговор до него. */
@@ -253,8 +180,7 @@ export function openChatSheet({ date = null } = {}) {
   }
 
   async function ask({ text, photo, history: past }) {
-    state.busy = true;
-    render();
+    input.setBusy(true);
 
     const provider = createProvider({
       provider: providerConfig.id,
@@ -289,7 +215,7 @@ export function openChatSheet({ date = null } = {}) {
       await logUsage(row).catch(() => {});
     }
 
-    state.busy = false;
+    input.setBusy(false);
 
     if (!result.ok) {
       state.messages.push({

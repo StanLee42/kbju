@@ -1,13 +1,13 @@
 // Настройки: типы дней, расписание, исключения на даты, цель и темп, хранилище.
 import { isStoragePersistent, requestPersistentStorage, usageEstimate, wipeEverything } from '../db.js';
 import * as db from '../db.js';
-import { AVAILABLE_PROVIDERS, createProvider, describeError, readImpedance } from '../llm/index.js';
-import { pickImage, prepareForApi } from '../media/image.js';
-import { normsFromMeasurement, dayTypeById, resolveDayTypeId } from '../norm.js';
+import { AVAILABLE_PROVIDERS, createProvider, describeError } from '../llm/index.js';
+import { dayTypeById, kcalFromMacros, macrosForKcal, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
-import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
-import { bytesHuman, fill, h, num, todayISO } from '../util.js';
+import { bytesHuman, fill, h, num, round, todayISO } from '../util.js';
 import { toast } from './components/sheet.js';
+import { DEFAULT_PRICES } from '../usage.js';
+import { openNormsChat } from './norms-chat.js';
 
 const WEEK_KEYS = [
   ['mon', 'Понедельник'], ['tue', 'Вторник'], ['wed', 'Среда'], ['thu', 'Четверг'],
@@ -41,7 +41,7 @@ export function mount(container) {
       h('h2', { class: 'card-title', text: 'Провайдер анализа' }),
       providerHost),
     h('section', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'Нормы из отчёта' }),
+      h('h2', { class: 'card-title', text: 'Нормы и калории' }),
       reportHost),
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Типы дней и нормы' }),
@@ -244,210 +244,23 @@ export function mount(container) {
     }
   }
 
-  // --- нормы из отчёта биоимпеданса ---
-
-  let reportBusy = false;
-  let reportMeasurements = null;
-  let reportNorms = null;
-  let reportError = null;
-  let reportFile = null;
-  let reportPreviewUrl = null;
-  // По умолчанию срезаем только шапку с именем: у отчётов этого вида она занимает
-  // около пятой части сверху, а таблица измерений начинается сразу под ней.
-  let cropFraction = 0.16;
-
-  function releasePreview() {
-    if (reportPreviewUrl) URL.revokeObjectURL(reportPreviewUrl);
-    reportPreviewUrl = null;
-  }
+  // --- нормы: разговор об этом живёт в отдельном окне ---
 
   function renderReport() {
-    const parts = [
+    fill(reportHost,
       h('p', { class: 'small muted' },
-        'Пришлите отчёт биоимпеданса — приложение прочитает измерения и посчитает нормы. '
-        + 'Расчёт делается здесь же, на устройстве: формулы арифметические и их видно целиком.'),
-    ];
-
-    if (reportError) {
-      parts.push(h('div', { class: 'card', style: 'border-color:var(--over)' },
-        h('div', { class: 'small', style: 'color:var(--over)' }, reportError.title || 'Не получилось'),
-        reportError.hint ? h('div', { class: 'tiny faint', style: 'margin-top:4px' }, reportError.hint) : null));
-    }
-
-    // Снимок и обрезка: затенённая часть провайдеру не уйдёт.
-    if (reportFile && reportPreviewUrl) {
-      parts.push(
-        h('div', { style: 'position:relative;margin-top:10px;border-radius:12px;overflow:hidden' },
-          h('img', { src: reportPreviewUrl, alt: 'отчёт', style: 'width:100%;display:block' }),
-          h('div', {
-            style: `position:absolute;left:0;right:0;top:0;height:${cropFraction * 100}%;`
-              + 'background:rgba(0,0,0,.72)',
-          }),
-          h('div', {
-            style: `position:absolute;left:0;right:0;top:${cropFraction * 100}%;height:2px;`
-              + 'background:var(--accent)',
-          })),
-        h('label', { class: 'field', style: 'margin-top:10px' },
-          h('span', { class: 'field-label', text: `Убрать сверху: ${Math.round(cropFraction * 100)}%` }),
-          h('input', {
-            type: 'range', min: '0', max: '50', step: '1',
-            value: String(Math.round(cropFraction * 100)),
-            oninput: (event) => {
-              cropFraction = Number(event.target.value) / 100;
-              renderReport();
-            },
-          })),
-        h('p', { class: 'tiny faint' },
-          'Затемнённая часть не уходит провайдеру. Следите, чтобы под ней осталась таблица '
-          + 'с измерениями: если срезать лишнее, приложение не сможет посчитать нормы.'),
-        h('div', { class: 'chips', style: 'margin-top:10px' },
-          h('button', {
-            class: 'btn btn-small btn-primary', type: 'button',
-            text: reportBusy ? 'Читаем отчёт…' : 'Отправить отчёт',
-            disabled: reportBusy,
-            onclick: sendReport,
-          }),
-          h('button', {
-            class: 'btn btn-small', type: 'button', text: 'Другой снимок',
-            disabled: reportBusy,
-            onclick: pickReport,
-          })),
-      );
-    } else {
-      parts.push(h('div', { class: 'chips', style: 'margin-top:12px' },
+        'Нормы калорий и БЖУ обсуждаются разговором: пришлите снимок отчёта биоимпеданса '
+        + 'или просто напишите словами — «тренер считает, что завышено», «хочу минус триста». '
+        + 'Числа считает приложение и показывает расчёт по шагам, чтобы видеть, что именно '
+        + 'сдвинулось, а решение остаётся за вами.'),
+      h('div', { class: 'chips', style: 'margin-top:12px' },
         h('button', {
-          class: 'btn btn-small', type: 'button',
-          text: reportBusy ? 'Читаем отчёт…' : 'Выбрать отчёт',
-          disabled: reportBusy,
-          onclick: pickReport,
-        })));
-    }
-
-    if (reportMeasurements) {
-      const m = reportMeasurements;
-      const line = (label, value, unit) => (value
-        ? h('div', { class: 'row-between', style: 'padding:3px 0' },
-          h('span', { class: 'small muted', text: label }),
-          h('span', { class: 'small mono', text: `${value} ${unit}`.trim() }))
-        : null);
-      parts.push(h('div', { style: 'margin-top:12px' },
-        line('Дата измерения', m.date || '', ''),
-        line('Вес', m.weight, 'кг'),
-        line('Тощая масса', m.leanMass, 'кг'),
-        line('Жировая масса', m.fatMass, 'кг'),
-        line('Доля жира', m.fatPercent, '%'),
-        line('Основной обмен', m.bmr, 'ккал'),
-        line('Обхват талии', m.waist, 'см')));
-    }
-
-    if (reportNorms?.ok) {
-      const n = reportNorms;
-      parts.push(h('div', { style: 'margin-top:12px' },
-        h('div', { class: 'small' }, h('b', { text: 'Посчитанные нормы' })),
-        h('div', { class: 'row-between', style: 'padding:3px 0' },
-          h('span', { class: 'small muted', text: 'Обычный день' }),
-          h('span', { class: 'small mono', text: `${n.rest.kcal} ккал · Б${n.rest.protein} Ж${n.rest.fat} У${n.rest.carbs}` })),
-        h('div', { class: 'row-between', style: 'padding:3px 0' },
-          h('span', { class: 'small muted', text: 'Тренировка' }),
-          h('span', { class: 'small mono', text: `${n.training.kcal} ккал · Б${n.training.protein} Ж${n.training.fat} У${n.training.carbs}` })),
-        h('div', { class: 'tiny faint', style: 'margin-top:6px' },
-          `Среднее по неделе ${n.weekly.kcal} ккал, ожидаемое снижение ${n.weekly.expectedLossKg} кг в неделю.`),
-        h('details', { style: 'margin-top:8px' },
-          h('summary', { class: 'tiny faint', style: 'cursor:pointer' }, 'Как это посчитано'),
-          h('div', { class: 'tiny faint', style: 'margin-top:6px;white-space:pre-wrap' }, n.steps.join('\n'))),
-        n.assumptions.length
-          ? h('div', { class: 'tiny faint', style: 'margin-top:8px' },
-            `Допущения: ${n.assumptions.join(' ')}`)
-          : null,
-        h('div', { class: 'chips', style: 'margin-top:10px' },
-          h('button', {
-            class: 'btn btn-small btn-primary', type: 'button',
-            text: 'Применить к типам дней', onclick: applyNorms,
-          }))));
-    } else if (reportMeasurements) {
-      parts.push(h('p', { class: 'small', style: 'margin-top:10px;color:var(--over)' },
-        reportNorms?.error || 'Нормы посчитать не удалось: не хватает измерений.'));
-      if (cropFraction > 0) {
-        parts.push(h('p', { class: 'tiny faint' },
-          'Возможно, обрезка срезала часть таблицы с весом и составом тела — уменьшите её '
-          + 'и отправьте снимок снова.'));
-      }
-    }
-
-    fill(reportHost, ...parts);
-  }
-
-  async function pickReport() {
-    if (!store.settings.provider?.key) {
-      reportError = { title: 'Сначала задайте ключ провайдера', hint: 'Без ключа отчёт прочитать некому.' };
-      renderReport();
-      return;
-    }
-    const file = await pickImage();
-    if (!file) return;
-    releasePreview();
-    reportFile = file;
-    reportPreviewUrl = URL.createObjectURL(file);
-    reportError = null;
-    renderReport();
-  }
-
-  async function sendReport() {
-    if (!reportFile) return;
-    reportBusy = true;
-    reportError = null;
-    reportMeasurements = null;
-    reportNorms = null;
-    renderReport();
-
-    try {
-      // Обрезаем до отправки: имя и название клиники модели знать незачем.
-      const image = await prepareForApi(reportFile, { maxSide: 1600, cropTopFraction: cropFraction });
-      const adapter = createProvider({
-        provider: store.settings.provider.id,
-        providerKey: store.settings.provider.key,
-        model: store.settings.provider.model,
-      });
-      const result = await readImpedance({
-        provider: adapter,
-        image: { base64: image.base64, mime: image.mime },
-      });
-
-      const model = store.settings.provider.model || 'deepseek-flash';
-      const prices = store.settings.prices || DEFAULT_PRICES;
-      for (const usage of result.usages || []) {
-        await logUsage(makeUsageRow({ kind: 'impedance', model, usage, prices })).catch(() => {});
-      }
-
-      if (!result.ok) {
-        reportError = result.error;
-      } else {
-        reportMeasurements = result.data;
-        reportNorms = normsFromMeasurement({
-          measurement: result.data,
-          pace: store.settings.goal?.pace ?? 0.5,
-        });
-        await db.put('measurements', { id: result.data.date || `m-${Date.now()}`, ...result.data });
-      }
-    } catch (error) {
-      const described = describeError(error);
-      reportError = { title: described.title, hint: described.hint };
-    } finally {
-      reportBusy = false;
-      renderReport();
-    }
-  }
-
-  async function applyNorms() {
-    if (!reportNorms?.ok) return;
-    const types = (store.settings.dayTypes || []).map((type) => {
-      if (type.id === 'rest') return { ...type, ...reportNorms.rest };
-      if (type.id === 'train') return { ...type, ...reportNorms.training };
-      return type;
-    });
-    await saveSettings({ dayTypes: types });
-    toast('Нормы обновлены');
-    renderDynamic();
+          class: 'btn btn-primary', type: 'button', text: 'Обсудить нормы',
+          onclick: () => openNormsChat(),
+        })),
+      h('p', { class: 'tiny faint', style: 'margin-top:10px' },
+        'Править нормы руками тоже можно — в разделе «Типы дней и нормы». Если менять калории '
+        + 'дня, белки, жиры и углеводы пересчитаются в той же пропорции.'));
   }
 
   // --- цены провайдера ---
@@ -520,6 +333,189 @@ export function mount(container) {
           onchange: (event) => patchDayType(index, { [key]: num(event.target.value) }),
         })))),
     )));
+  }
+
+  function patchDayType(index, patch) {
+    const types = store.settings.dayTypes.map((type, i) => (i === index ? { ...type, ...patch } : type));
+    saveSettings({ dayTypes: types });
+    renderDynamic();
+  }
+
+  // --- расписание ---
+
+  function renderSchedule() {
+    const { schedule } = store.settings;
+    const isCycle = schedule.mode === 'cycle';
+
+    fill(scheduleModeRow, ...[
+      ['week', 'По дням недели'],
+      ['cycle', 'По циклу'],
+    ].map(([mode, label]) => h('button', {
+      type: 'button', text: label,
+      'aria-pressed': String(schedule.mode === mode),
+      onclick: () => {
+        saveSettings({ schedule: { ...store.settings.schedule, mode } });
+        renderDynamic();
+      },
+    })));
+
+    weekHost.hidden = isCycle;
+    cycleHost.hidden = !isCycle;
+
+    if (!isCycle) {
+      fill(weekHost, ...WEEK_KEYS.map(([key, label]) => h('label', {
+        class: 'row-between', style: 'padding:7px 0',
+      },
+      h('span', { class: 'small', text: label }),
+      h('select', {
+        style: 'width:auto;min-width:150px',
+        onchange: (event) => {
+          const week = { ...store.settings.schedule.week, [key]: event.target.value };
+          saveSettings({ schedule: { ...store.settings.schedule, week } });
+        },
+      }, (store.settings.dayTypes || []).map((type) => h('option', {
+        value: type.id, text: type.name, selected: store.settings.schedule.week[key] === type.id,
+      }))))));
+    } else {
+      const { length = 2, trainPositions = [], startDate } = schedule.cycle || {};
+      const positions = Array.from({ length }, (_, i) => i + 1);
+
+      fill(cycleHost, 
+        h('label', { class: 'field' },
+          h('span', { class: 'field-label', text: 'Длина цикла, дней' }),
+          h('input', {
+            type: 'number', min: '2', max: '14', value: length,
+            onchange: (event) => {
+              const nextLength = Math.max(2, Math.min(14, num(event.target.value, length)));
+              const allowed = trainPositions.filter((position) => position <= nextLength);
+              saveSettings({
+                schedule: {
+                  ...store.settings.schedule,
+                  cycle: { ...store.settings.schedule.cycle, length: nextLength, trainPositions: allowed },
+                },
+              });
+              renderDynamic();
+            },
+          })),
+        h('div', { class: 'field' },
+          h('span', { class: 'field-label', text: 'В какие дни цикла тренировка' }),
+          h('div', { class: 'chips' }, positions.map((position) => h('button', {
+            type: 'button', text: String(position),
+            class: 'btn btn-small',
+            'aria-pressed': String(trainPositions.includes(position)),
+            style: trainPositions.includes(position) ? 'border-color:var(--accent);font-weight:600' : '',
+            onclick: () => {
+              const next = trainPositions.includes(position)
+                ? trainPositions.filter((item) => item !== position)
+                : [...trainPositions, position].sort((a, b) => a - b);
+              saveSettings({
+                schedule: {
+                  ...store.settings.schedule,
+                  cycle: { ...store.settings.schedule.cycle, trainPositions: next },
+                },
+              });
+              renderDynamic();
+            },
+          })))),
+        h('label', { class: 'field' },
+          h('span', { class: 'field-label', text: 'Первый день цикла' }),
+          h('input', {
+            type: 'date', value: startDate || todayISO(),
+            onchange: (event) => saveSettings({
+              schedule: {
+                ...store.settings.schedule,
+                cycle: { ...store.settings.schedule.cycle, startDate: event.target.value },
+              },
+            }),
+          })),
+        h('div', { class: 'tiny faint' },
+          `Сегодня по расписанию: ${dayTypeById(store.settings, resolveDayTypeId(todayISO(), store.settings)).name}`),
+      );
+    }
+  }
+
+  // --- исключения ---
+
+  function renderExceptions() {
+    const overrides = store.settings.dateOverrides || {};
+    const dates = Object.keys(overrides).sort();
+
+    const dateInput = h('input', { type: 'date', value: todayISO() });
+    const typeSelect = h('select', {}, (store.settings.dayTypes || []).map((type) => h('option', {
+      value: type.id, text: type.name,
+    })));
+
+    fill(exceptionsHost, 
+      dates.length
+        ? h('div', {}, dates.map((date) => h('div', {
+          class: 'row-between', style: 'padding:7px 0;border-bottom:1px solid var(--line)',
+        },
+        h('span', { class: 'small' },
+          `${date} — ${store.settings.dayTypes.find((type) => type.id === overrides[date])?.name || overrides[date]}`),
+        h('button', {
+          class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать',
+          onclick: () => {
+            const next = { ...store.settings.dateOverrides };
+            delete next[date];
+            saveSettings({ dateOverrides: next });
+            renderDynamic();
+          },
+        }))))
+        : h('div', { class: 'small faint', style: 'margin-bottom:10px' },
+          'Исключений нет. Обычно они не нужны: тип дня подставляется по расписанию.'),
+      h('div', { class: 'row', style: 'margin-top:10px' }, dateInput, typeSelect,
+        h('button', {
+          class: 'btn btn-small nowrap', type: 'button', text: 'Добавить',
+          onclick: () => {
+            if (!dateInput.value) return;
+            saveSettings({
+              dateOverrides: { ...store.settings.dateOverrides, [dateInput.value]: typeSelect.value },
+            });
+            renderDynamic();
+          },
+        })),
+    );
+  }
+
+  // --- типы дней ---
+
+  function renderDayTypes() {
+    const types = store.settings.dayTypes || [];
+    fill(dayTypesHost, ...types.map((type, index) => h('div', {
+      style: 'padding:10px 0;border-bottom:1px solid var(--line)',
+    },
+    h('input', {
+      type: 'text',
+      value: type.name,
+      onchange: (event) => patchDayType(index, { name: event.target.value.trim() || type.name }),
+    }),
+    h('div', { class: 'grid-4', style: 'margin-top:8px' },
+      MACRO_FIELDS.map(([key, label]) => h('label', { class: 'field', style: 'margin:0' },
+        h('span', { class: 'field-label', text: label }),
+        h('input', {
+          type: 'number', inputmode: 'decimal', value: type[key],
+          // Калории и БЖУ правятся вместе: иначе числа разъезжаются, и день врёт.
+          onchange: (event) => patchDayTypeLinked(index, key, event.target.value),
+        })))),
+    h('div', { class: 'tiny faint', style: 'margin-top:6px' },
+      `белки, жиры и углеводы дают ${round(kcalFromMacros(type))} ккал`
+      + (Math.abs(kcalFromMacros(type) - num(type.kcal)) < 1 ? ' — сходится с планом' : '')),
+    )));
+  }
+
+  /**
+   * Правка дня целиком: меняете калории — БЖУ пересчитываются в той же пропорции,
+   * меняете макрос — калории пересчитываются по нему. Так план дня остаётся согласованным.
+   */
+  function patchDayTypeLinked(index, key, rawValue) {
+    const type = store.settings.dayTypes[index];
+    const macros = { protein: type.protein, fat: type.fat, carbs: type.carbs };
+    if (key === 'kcal') {
+      patchDayType(index, { kcal: num(rawValue), ...macrosForKcal(macros, num(rawValue)) });
+      return;
+    }
+    const updated = { ...macros, [key]: num(rawValue) };
+    patchDayType(index, { ...updated, kcal: round(kcalFromMacros(updated)) });
   }
 
   function patchDayType(index, patch) {

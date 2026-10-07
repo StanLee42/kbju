@@ -78,6 +78,32 @@ export function emptyTotals() {
   return totals;
 }
 
+/** Калории по макросам: 4 ккал на грамм белков и углеводов, 9 на грамм жиров. */
+export function kcalFromMacros({ protein = 0, fat = 0, carbs = 0 } = {}) {
+  return 4 * num(protein) + 9 * num(fat) + 4 * num(carbs);
+}
+
+/**
+ * Пересчитывает БЖУ под заданные калории, сохраняя их соотношение.
+ *
+ * Нужно, когда человек меняет калории дня руками: раньше числа БЖУ оставались прежними,
+ * и день начинал врать — калории одни, а макросы от другого плана. Держим форму дня:
+ * умножаем белки, жиры и углеводы на одно и то же число.
+ */
+export function macrosForKcal(macros = {}, targetKcal) {
+  const current = kcalFromMacros(macros);
+  const target = num(targetKcal);
+  if (current <= 0 || target <= 0) {
+    return { protein: num(macros.protein), fat: num(macros.fat), carbs: num(macros.carbs) };
+  }
+  const factor = target / current;
+  return {
+    protein: round(num(macros.protein) * factor, 1),
+    fat: round(num(macros.fat) * factor, 1),
+    carbs: round(num(macros.carbs) * factor, 1),
+  };
+}
+
 /** Остаток до нормы: отрицательное значение означает перебор. */
 export function remaining(norm, totals) {
   const result = {};

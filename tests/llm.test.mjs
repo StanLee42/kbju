@@ -2,10 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { KINDS, analyzeChat, analyzeFood, readImpedance } from '../js/llm/index.js';
+import { KINDS, analyzeChat, analyzeFood, discussNorms, readImpedance } from '../js/llm/index.js';
 import { providerError } from '../js/llm/errors.js';
-import { extractJson, parseAnalysis, parseImpedance } from '../js/llm/parse.js';
-import { CHAT_SYSTEM_PROMPT, SYSTEM_PROMPT } from '../js/llm/prompt.js';
+import { extractJson, parseAnalysis, parseImpedance, parseNorms } from '../js/llm/parse.js';
+import { CHAT_SYSTEM_PROMPT, NORMS_SYSTEM_PROMPT, SYSTEM_PROMPT } from '../js/llm/prompt.js';
 
 const validAnswer = JSON.stringify({
   dish: 'Паста с сыром',
@@ -272,4 +272,62 @@ test('чат-промпт ставит слова человека выше сн
   // Схема ответа общая со снимком: разбирает её тот же код.
   assert.match(CHAT_SYSTEM_PROMPT, /"basis"/);
   assert.match(SYSTEM_PROMPT, /"basis"/);
+});
+
+test('ответ о нормах разбирается: рычаги и измерения', () => {
+  const answer = JSON.stringify({
+    measurement: { sex: 'M', age: 41, height: 176, weight: 82, leanMass: 63.5, bmr: 1800 },
+    params: { pace: 0.5, activityRest: 1.375, proteinPerKgLean: 1.9, fatPerKgMin: 0.8,
+      fatPerKgTraining: 0.9, trainingExtraKcal: 400, deficitShareTraining: 0.7 },
+    comment: 'Оставил как было, только белок чуть ниже.',
+    question: null,
+    confidence: 'medium',
+  });
+  const parsed = parseNorms(answer);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.params.pace, 0.5);
+  assert.equal(parsed.data.measurement.leanMass, 63.5);
+  assert.equal(parsed.data.measurement.sex, 'M');
+  assert.match(parsed.data.comment, /белок/);
+  assert.equal(parsed.data.warnings.length, 0);
+});
+
+test('рычаги за разумными границами приводятся к границе и это отмечается', () => {
+  const answer = JSON.stringify({
+    params: { pace: 4, activityRest: 0.4, proteinPerKgLean: 9 },
+    comment: 'агрессивно', question: null, confidence: 'low',
+  });
+  const parsed = parseNorms(answer);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.params.pace, 1.5, 'темп приведён к верхней границе');
+  assert.equal(parsed.data.params.activityRest, 1.1, 'активность приведена к нижней границе');
+  assert.equal(parsed.data.params.proteinPerKgLean, 3);
+  assert.equal(parsed.data.warnings.length, 3);
+});
+
+test('ответ без рычагов считается ошибкой: считать нормы не из чего', () => {
+  assert.equal(parseNorms(JSON.stringify({ comment: 'ага', params: {} })).ok, false);
+  assert.equal(parseNorms('не json').ok, false);
+});
+
+test('разговор о нормах передаёт модели текущие рычаги и историю', async () => {
+  const provider = stubProvider([{ text: '{}' }]);
+  const result = await discussNorms({
+    provider,
+    text: 'тренер считает, что завышено',
+    current: { pace: 0.5, activityRest: 1.375, restKcal: 2222 },
+    history: [{ role: 'user', text: 'смотри отчёт' }],
+  });
+  assert.equal(result.ok, false, 'пустой ответ разбор не проходит');
+  const message = provider.calls[0].text;
+  assert.ok(message.includes('Текущие нормы'), 'текущие рычаги переданы');
+  assert.ok(message.includes('2222'), 'видно текущие калории');
+  assert.ok(message.includes('тренер считает'));
+  assert.equal(provider.calls[0].system, NORMS_SYSTEM_PROMPT);
+});
+
+test('промпт про нормы запрещает модели считать числа самой', () => {
+  assert.match(NORMS_SYSTEM_PROMPT, /НЕ считаешь калории и БЖУ сам/);
+  assert.match(NORMS_SYSTEM_PROMPT, /"params"/);
+  assert.match(NORMS_SYSTEM_PROMPT, /pace/);
 });

@@ -171,3 +171,66 @@ export function parseImpedance(text) {
 
   return { ok: true, data };
 }
+// Границы для рычагов норм: модель может ошибиться, а нормы уходят в дневник.
+// Значения за границами означают не «смелый расчёт», а ошибку ответа.
+const PARAM_LIMITS = {
+  pace: [0.1, 1.5],
+  activityRest: [1.1, 2.0],
+  trainingExtraKcal: [0, 1200],
+  proteinPerKgLean: [1.0, 3.0],
+  fatPerKgMin: [0.5, 1.5],
+  fatPerKgTraining: [0.5, 1.5],
+  deficitShareTraining: [0.2, 1.0],
+};
+
+const MEASUREMENT_FIELDS = ['sex', 'age', 'height', 'weight', 'leanMass', 'fatMass', 'bmr',
+  'waist', 'hips', 'bmi', 'activeCellMass', 'skeletalMuscleMass', 'totalWater',
+  'extracellularWater', 'boneMineralMass', 'fatPercent'];
+
+/** Разбирает ответ разговора о нормах: измерения, рычаги и пояснение. */
+export function parseNorms(text) {
+  const parsed = extractJson(text);
+  if (!parsed || typeof parsed !== 'object') {
+    return { ok: false, error: 'ответ не является JSON' };
+  }
+
+  const warnings = [];
+  const rawParams = parsed.params && typeof parsed.params === 'object' ? parsed.params : {};
+  const params = {};
+  for (const [key, [min, max]] of Object.entries(PARAM_LIMITS)) {
+    const value = num(rawParams[key]);
+    if (!value) continue;
+    if (value < min || value > max) {
+      warnings.push(`«${key}» вышел за разумные границы и приведён к ближайшей`);
+      params[key] = Math.min(max, Math.max(min, value));
+    } else {
+      params[key] = value;
+    }
+  }
+  if (!Object.keys(params).length) {
+    return { ok: false, error: 'в ответе нет ни одного рычага для расчёта норм' };
+  }
+
+  const rawMeasurement = parsed.measurement && typeof parsed.measurement === 'object'
+    ? parsed.measurement
+    : null;
+  const measurement = rawMeasurement
+    ? Object.fromEntries(MEASUREMENT_FIELDS
+      .map((field) => [field, rawMeasurement[field] === undefined || rawMeasurement[field] === null
+        ? null
+        : (field === 'sex' ? String(rawMeasurement[field]) : num(rawMeasurement[field]))])
+      .filter(([, value]) => value !== null && value !== '' && value !== 0))
+    : null;
+
+  return {
+    ok: true,
+    data: {
+      params,
+      measurement: measurement && Object.keys(measurement).length ? measurement : null,
+      comment: String(parsed.comment || '').trim(),
+      question: String(parsed.question || '').trim() || null,
+      confidence: CONFIDENCE.has(parsed.confidence) ? parsed.confidence : 'low',
+      warnings,
+    },
+  };
+}
