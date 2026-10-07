@@ -3,6 +3,7 @@
 import { isStoragePersistent, requestPersistentStorage } from './db.js';
 import { refreshToday, store, init } from './state.js';
 import { h } from './util.js';
+import { BUILD_VERSION } from './version.js';
 import { openChatSheet } from './ui/chat.js';
 import * as calendar from './ui/calendar.js';
 import * as settings from './ui/settings.js';
@@ -75,6 +76,35 @@ async function main() {
       console.warn('service worker не зарегистрирован', error);
       return null;
     });
+
+    // Проверяем обновление при каждом запуске: одна регистрация обновление не запускает,
+    // а браузер сам спрашивает о новой сборке реже, чем раз в сутки. Из-за этого владелец
+    // неделю видел старые экраны, хотя на сервере давно лежала новая сборка.
+    registration?.update().catch(() => {});
+
+    // Служба может оказаться новее страницы: тогда на телефоне работает прежний код,
+    // хотя строка версии показывает новую сборку — так владелец и не нашёл новую кнопку.
+    // Сравниваем версию самого кода с версией службы и один раз выравниваем перезагрузкой.
+    const serviceWorkerVersion = await new Promise((resolve) => {
+      const controller = navigator.serviceWorker.controller;
+      if (!controller) { resolve(null); return; }
+      const channel = new MessageChannel();
+      const timer = setTimeout(() => resolve(null), 1500);
+      channel.port1.onmessage = (event) => {
+        clearTimeout(timer);
+        resolve(event.data?.version || null);
+      };
+      controller.postMessage({ type: 'version' }, [channel.port2]);
+    });
+
+    if (serviceWorkerVersion && serviceWorkerVersion !== BUILD_VERSION) {
+      // Один раз на версию службы: иначе перезагрузка могла бы зациклиться.
+      const asked = sessionStorage.getItem('kbju-version-aligned');
+      if (asked !== serviceWorkerVersion) {
+        sessionStorage.setItem('kbju-version-aligned', serviceWorkerVersion);
+        location.reload();
+      }
+    }
 
     // Телефон держит приложение в памяти и не открывает его заново — значит, и новую
     // сборку не проверяет: браузер спрашивает о ней только при загрузке страницы.

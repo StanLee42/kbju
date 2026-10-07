@@ -43,7 +43,19 @@ async function main() {
     await cp(from, to, { recursive: true });
   }
 
-  const files = (await walk(target)).sort();
+  // Версию вписываем и в сам код: иначе приложение не знает, какую сборку оно выполняет,
+  // и в настройках приходится верить службе, которая может опережать страницу.
+  const codeVersionFile = 'js/version.js';
+  const writeCodeVersion = async (version) => {
+    await writeFile(
+      join(target, codeVersionFile),
+      `// Версия работающей сборки: подставлена сборкой, руками не править.\n`
+      + `export const BUILD_VERSION = '${version}';\n`,
+      'utf8',
+    );
+  };
+
+  const files = (await walk(target)).sort().concat(codeVersionFile).sort();
   console.log(`собрано файлов: ${files.length} -> ${target}`);
 
   const forbidden = files.filter((file) => FORBIDDEN.some((pattern) => pattern.test(file)));
@@ -69,7 +81,11 @@ async function main() {
   // Имя кэша должно меняться вместе с содержимым. Иначе после публикации новой версии
   // service worker продолжит отдавать старые файлы, и на телефоне ничего не обновится.
   const hash = createHash('sha1');
-  for (const file of files) hash.update(await readFile(join(target, file)));
+  for (const file of files) {
+    // Файл с версией в отпечаток не входит: иначе он зависел бы сам от себя.
+    if (file === codeVersionFile) continue;
+    hash.update(await readFile(join(target, file)));
+  }
   const version = `kbju-${hash.digest('hex').slice(0, 8)}`;
 
   const stamped = withShell.replace(/const VERSION = '[^']*'/, `const VERSION = '${version}'`);
@@ -78,6 +94,7 @@ async function main() {
     return 1;
   }
   await writeFile(swPath, stamped, 'utf8');
+  await writeCodeVersion(version);
   console.log(`версия сборки: ${version} — кэш обновится при первой загрузке`);
   console.log(`в офлайн-кэш включено файлов: ${shell.length}`);
 

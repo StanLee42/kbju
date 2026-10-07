@@ -5,6 +5,7 @@ import { AVAILABLE_PROVIDERS, createProvider, describeError } from '../llm/index
 import { dayTypeById, kcalFromMacros, macrosForKcal, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
 import { bytesHuman, fill, h, num, round, todayISO } from '../util.js';
+import { BUILD_VERSION } from '../version.js';
 import { toast } from './components/sheet.js';
 import { DEFAULT_PRICES } from '../usage.js';
 import { openNormsChat } from './norms-chat.js';
@@ -69,18 +70,14 @@ export function mount(container) {
   // --- версия сборки ---
 
   /**
-   * Показывает, какая сборка сейчас работает. Файл версии читаем в обход кэша,
-   * иначе service worker отдаст старую строку и смысл проверки потеряется.
-   */
-  /**
-   * Показывает, какая сборка сейчас работает, и какая лежит на сервере.
+   * Показывает, какая сборка работает сейчас и какая лежит на сервере.
    *
-   * Работающую сборку сообщает служба, которая обслуживает страницу. Это важно: человек
-   * уже дважды видел старое приложение, глядя на новую версию в этой строке — файл версии
-   * читается в обход кэша, поэтому показывает сервер, а не то, что открыто сейчас.
+   * Работающую сборку берём из самого кода: служба может быть уже новой, а страница —
+   * прежней, и тогда верить ей нельзя. На этом владелец дважды попал: строка показывала
+   * новую версию, а кнопки и функции были из старой.
    */
   function buildVersionLine() {
-    const line = h('p', { class: 'tiny faint center' }, 'версия: определяем…');
+    const line = h('p', { class: 'tiny faint center' }, `работает сборка: ${BUILD_VERSION}`);
     const hint = h('p', { class: 'tiny faint center', style: 'margin-top:6px' },
       'Когда приходит новая сборка, приложение перезагружается само — и при запуске, '
       + 'и когда вы возвращаетесь к нему. Кнопка нужна, если этого не случилось.');
@@ -101,42 +98,18 @@ export function mount(container) {
       },
     });
 
-    Promise.all([runningVersion(), serverVersion()]).then(([running, server]) => {
-      if (!running) {
-        // Службы ещё нет: страница только что загрузилась из сети, значит работает то,
-        // что лежит на сервере.
-        line.textContent = server ? `сборка на сервере: ${server}` : 'сборка для разработки';
-        return;
-      }
-      if (server && server !== running) {
-        line.textContent = `работает сборка: ${running} · на сервере новее: ${server}`;
-        line.style.color = 'var(--over)';
-        hint.textContent = 'На сервере уже новая сборка. Нажмите «Обновить приложение» — '
-          + 'она подхватится сразу.';
-        return;
-      }
-      line.textContent = `работает сборка: ${running}`;
+    serverVersion().then((server) => {
+      if (!server || server === BUILD_VERSION) return;
+      line.textContent = `работает сборка: ${BUILD_VERSION} · на сервере новее: ${server}`;
+      line.style.color = 'var(--over)';
+      hint.textContent = 'На сервере лежит другая сборка. Нажмите «Обновить приложение» — '
+        + 'новая подхватится сразу; если не помогло, нажмите ещё раз.';
     });
 
     return h('div', {},
       line,
       h('div', { class: 'chips', style: 'justify-content:center;margin-top:6px' }, refresh),
       hint);
-  }
-
-  /** Сборка, которая обслуживает страницу: её сообщает сама служба. */
-  function runningVersion() {
-    const controller = navigator.serviceWorker?.controller;
-    if (!controller) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      const channel = new MessageChannel();
-      const timer = setTimeout(() => resolve(null), 1500);
-      channel.port1.onmessage = (event) => {
-        clearTimeout(timer);
-        resolve(event.data?.version || null);
-      };
-      controller.postMessage({ type: 'version' }, [channel.port2]);
-    });
   }
 
   /** Сборка, которая лежит на сервере: файл читаем в обход кэша. */
