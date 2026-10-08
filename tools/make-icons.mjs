@@ -169,7 +169,8 @@ function render(size) {
 }
 
 mkdirSync(outDir, { recursive: true });
-for (const size of [192, 512]) {
+// 180 — размер иконки на домашнем экране iPhone, 192 и 512 — для Android и манифеста.
+for (const size of [180, 192, 512]) {
   const file = join(outDir, `icon-${size}.png`);
   writeFileSync(file, render(size));
   console.log(`готово: ${file}`);
