@@ -73,8 +73,11 @@ const loadedStyles = await evaluate(`(() => {
   const sheet = [...document.styleSheets].find((s) => (s.href || '').includes('styles.css'));
   if (!sheet) return 'файл стилей не найден';
   try {
+    // Признак свежих стилей — правило панели вкладок: оно держит вкладки в один ряд
+    // и живёт в стилях постоянно. Раньше здесь было правило из блока колец, но кольца
+    // с экрана убрали вместе с блоком.
     const rules = [...sheet.cssRules].map((rule) => rule.cssText).join('\\n');
-    return rules.includes('max-width: 380px') ? 'новая вёрстка загружена' : 'стили старые';
+    return rules.includes('grid-auto-flow: column') ? 'новая вёрстка загружена' : 'стили старые';
   } catch {
     return 'правила недоступны';
   }

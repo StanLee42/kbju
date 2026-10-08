@@ -1,4 +1,4 @@
-// Экран «Сегодня»: кольца, полоски, лента записей, переключатель типа дня.
+// Экран дня: плашка типа дня, полоски по показателям, лента записей с итогом и режим объединения.
 import { MACROS, byTimeAscending, dayTypeById, remaining, resolveDayTypeId } from '../norm.js';
 import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayFull } from '../util.js';
 import { createBar } from './components/bar.js';
