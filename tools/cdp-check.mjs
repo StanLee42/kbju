@@ -11,6 +11,8 @@ if (!page) {
   process.exit(1);
 }
 
+const pageOrigin = new URL(url).origin;
+
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {
   ws.addEventListener('open', resolve);
@@ -36,7 +38,13 @@ ws.addEventListener('message', (event) => {
     console.log('КОНСОЛЬ:', message.params.type, text);
   }
   if (message.method === 'Log.entryAdded') {
-    console.log('ЛОГ:', message.params.entry.level, message.params.entry.text);
+    const entry = message.params.entry;
+    // Chrome отдаёт и накопленные записи журнала этой вкладки, в том числе с адресов,
+    // где вкладка была раньше. Чужие записи отбрасываем: иначе проверка показывает
+    // ошибки страницы, которой уже нет. Адрес ошибки печатаем — без него непонятно,
+    // какой файл не отдался.
+    if (entry.url && !entry.url.startsWith(pageOrigin)) return;
+    console.log('ЛОГ:', entry.level, entry.text, entry.url ? `· ${entry.url}` : '');
   }
 });
 
