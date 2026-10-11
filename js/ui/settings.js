@@ -1,6 +1,7 @@
 // Настройки: типы дней, расписание, исключения на даты, цель и темп, хранилище.
 import { isStoragePersistent, requestPersistentStorage, usageEstimate, wipeEverything } from '../db.js';
 import * as db from '../db.js';
+import { clearChat } from '../chat-session.js';
 import { AVAILABLE_PROVIDERS, createProvider, describeError } from '../llm/index.js';
 import { dayTypeById, kcalFromMacros, macrosForKcal, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
@@ -668,6 +669,8 @@ export function mount(container) {
           return;
         }
         await wipeEverything();
+        // Разговор о еде лежит вне дневника, но это тоже данные человека.
+        clearChat();
         toast('Данные удалены');
         location.reload();
       },
