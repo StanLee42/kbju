@@ -118,10 +118,9 @@ export function saveChat({
     cost: numberOr(cost, 0),
   };
 
-  if (!kept.length && !chat.current) {
-    drop(target, CHAT_KEY);
-    return true;
-  }
+  // Записывать нечего — запись не трогаем. Стирать её здесь нельзя: окно открывают
+  // и на другом дне, где разговора нет, а разговор прежнего дня должен уцелеть.
+  if (!kept.length && !chat.current) return true;
 
   if (write(target, CHAT_KEY, JSON.stringify(chat))) return true;
 
@@ -169,8 +168,12 @@ export function loadChat({ date = null, storage = null } = {}) {
   };
 }
 
-/** Набранный, но не отправленный текст: отдельно от переписки, он пишется на каждую букву. */
-export function saveTyped(text, { storage = null } = {}) {
+/**
+ * Набранный, но не отправленный текст: отдельно от переписки, он пишется на каждую букву.
+ * Дата хранится вместе с текстом: набранное вчера в сегодняшнем окне — такая же ошибка,
+ * как вчерашние числа.
+ */
+export function saveTyped(text, { date = '', storage = null } = {}) {
   const target = store(storage);
   if (!target) return false;
   const value = String(text ?? '');
@@ -178,14 +181,28 @@ export function saveTyped(text, { storage = null } = {}) {
     drop(target, TYPED_KEY);
     return true;
   }
-  return write(target, TYPED_KEY, value);
+  const typed = { v: VERSION, date: typeof date === 'string' ? date : '', text: value };
+  return write(target, TYPED_KEY, JSON.stringify(typed));
 }
 
-export function loadTyped({ storage = null } = {}) {
+export function loadTyped({ date = '', storage = null } = {}) {
   const target = store(storage);
   if (!target) return '';
-  const value = read(target, TYPED_KEY);
-  return typeof value === 'string' ? value : '';
+
+  const raw = read(target, TYPED_KEY);
+  if (typeof raw !== 'string' || !raw) return '';
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return '';
+  }
+
+  if (!data || typeof data !== 'object' || data.v !== VERSION) return '';
+  if (typeof data.text !== 'string') return '';
+  if (date && data.date !== date) return '';
+  return data.text;
 }
 
 /** Полный сброс и запись в дневник: разговор закончен, возвращать его незачем. */

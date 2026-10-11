@@ -49,8 +49,8 @@ export function openChatSheet({ date = null } = {}) {
   const input = createComposer({
     placeholder: 'Что вы съели',
     placeholderWithDraft: 'Уточните, если нужно',
-    initialText: loadTyped(),
-    onTyped: (text) => saveTyped(text),
+    initialText: loadTyped({ date: targetDate }),
+    onTyped: (text) => saveTyped(text, { date: targetDate }),
     keyWarning: keyMissing
       ? 'Ключ провайдера не заполнен: посчитать не получится. Заполните ключ в настройках.'
       : null,

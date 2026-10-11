@@ -113,13 +113,42 @@ test('пустой разговор не хранится', () => {
 
 test('набранный текст живёт отдельно от переписки', () => {
   const storage = memoryStorage();
-  saveTyped('половина шаурмы из ларька', { storage });
+  saveTyped('половина шаурмы из ларька', { date: DAY, storage });
 
-  assert.equal(loadTyped({ storage }), 'половина шаурмы из ларька');
+  assert.equal(loadTyped({ date: DAY, storage }), 'половина шаурмы из ларька');
   assert.equal(loadChat({ date: DAY, storage }), null);
 
-  saveTyped('', { storage });
-  assert.equal(loadTyped({ storage }), '');
+  saveTyped('', { date: DAY, storage });
+  assert.equal(loadTyped({ date: DAY, storage }), '');
+});
+
+test('набранный текст другого дня не показывается', () => {
+  const storage = memoryStorage();
+  saveTyped('половина шаурмы', { date: DAY, storage });
+
+  assert.equal(loadTyped({ date: '2026-10-12', storage }), '');
+  assert.equal(loadTyped({ date: DAY, storage }), 'половина шаурмы');
+});
+
+test('битая запись набранного не ломает поле ввода', () => {
+  const storage = memoryStorage();
+  storage.setItem('kbju-food-chat-text', 'просто строка');
+  assert.equal(loadTyped({ date: DAY, storage }), '');
+
+  storage.setItem('kbju-food-chat-text', JSON.stringify({ v: 99, date: DAY, text: 'каша' }));
+  assert.equal(loadTyped({ date: DAY, storage }), '');
+});
+
+test('открытие окна на другом дне не стирает разговор прежнего дня', () => {
+  const storage = memoryStorage();
+  saveChat({ date: DAY, messages: [{ role: 'user', text: 'борщ' }], current }, { storage });
+
+  // Окно открыли на другом дне: сохранять там нечего, и запись прежнего дня уцелела.
+  saveChat({ date: '2026-10-12', messages: [], current: null }, { storage });
+
+  const back = loadChat({ date: DAY, storage });
+  assert.equal(back.messages.length, 1);
+  assert.equal(back.messages[0].text, 'борщ');
 });
 
 test('очистка убирает и переписку, и набранное', () => {
