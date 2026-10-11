@@ -102,7 +102,8 @@ def load_values() -> list:
     return values
 
 
-def find_personal_data(diff: str) -> list:
+def find_values(diff: str) -> list:
+    """Точная проверка: значения из списка владельца. Это блокирующая проверка."""
     lines = added_lines(diff)
     found = []
     for value in load_values():
@@ -111,7 +112,18 @@ def find_personal_data(diff: str) -> list:
             if pattern.search(line):
                 found.append(f"значение из списка: {line.strip()[:90]}")
                 break
-    for line in lines:
+    return found
+
+
+def find_report_like(diff: str) -> list:
+    """Мягкая проверка: строка похожа на отчёт с измерениями.
+
+    Блокировать по ней нельзя: выдуманный пример в тестах и спецификациях выглядит ровно
+    так же, как настоящие числа, и различить их по образцу невозможно. Поэтому проверка
+    только предупреждает, а блокирует точный список значений.
+    """
+    found = []
+    for line in added_lines(diff):
         low = line.lower()
         has_word = any(word in low for word in MEASUREMENT_WORDS)
         if has_word and len(NUMBER.findall(line)) >= 3:
@@ -131,15 +143,24 @@ def check_commit(command: str = "") -> int:
         )
         return 2
 
-    found = find_personal_data(staged_diff(command))
-    if found:
+    diff = staged_diff(command)
+    values = find_values(diff)
+    if values:
         print(
             "Заблокировано: в коммите персональные данные владельца.\n"
-            + "\n".join(found)
+            + "\n".join(values)
             + "\nПравило записано в AGENTS.md, спецификация — openspec/specs/document-privacy.",
             file=sys.stderr,
         )
         return 2
+
+    for line in find_report_like(diff):
+        print(
+            f"Внимание: {line}\n"
+            "Если это настоящие измерения владельца, коммит останавливается и правка обезличивается.\n"
+            "Если это выдуманный пример из тестов, спецификаций или набора задач — так и должно быть.",
+            file=sys.stderr,
+        )
 
     return 0
 
