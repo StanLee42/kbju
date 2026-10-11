@@ -5,16 +5,17 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const guard = join(root, '.zcode', 'hooks', 'commit-guard.py');
 
-function runGuard(command, { cwd = root, values = '' } = {}) {
+function runGuard(command, { cwd = root, values = '', home = '' } = {}) {
   const env = { ...process.env };
   if (values) env.KBJU_VALUES_FILE = values;
   else delete env.KBJU_VALUES_FILE;
+  if (home) env.HOME = home;
   try {
     execFileSync('python3', [guard, 'zcode'], {
       cwd,
@@ -29,8 +30,8 @@ function runGuard(command, { cwd = root, values = '' } = {}) {
 }
 
 // Каталог-проба: свой рабочий каталог, своя ветка, один начальный коммит.
-function repo(branch, files = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'kbju-guard-'));
+function repo(branch, files = {}, parent = tmpdir()) {
+  const dir = mkdtempSync(join(parent, 'kbju-guard-'));
   const git = (...args) =>
     execFileSync(
       'git',
@@ -108,6 +109,14 @@ test('значения из каталога коммита читаются и 
   const done = runGuard(`cd ${feature} && git commit -m "правка"`, { cwd: main });
   assert.equal(done.code, 2, done.stderr);
   assert.match(done.stderr, /персональные данные/);
+});
+
+test('путь с тильдой разворачивается в домашний каталог', () => {
+  const home = mkdtempSync(join(tmpdir(), 'kbju-home-'));
+  const main = repo('main', {}, home);
+  const done = runGuard(`cd ~/${basename(main)} && git commit -m "правка"`, { cwd: home, home });
+  assert.equal(done.code, 2, done.stderr);
+  assert.match(done.stderr, /прямой коммит в main/);
 });
 
 test('чужая команда не проверяется как коммит', () => {

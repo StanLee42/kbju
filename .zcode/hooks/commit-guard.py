@@ -101,7 +101,7 @@ def git_call(command: str) -> tuple:
         start = 0
         # Каталог переходит из куска в кусок: `cd <путь> && git commit` это две части.
         if len(tokens) > 1 and tokens[0] == "cd":
-            directory = tokens[1]
+            directory = os.path.expanduser(tokens[1])
             start = 2
         git_at = None
         for position in range(start, len(tokens)):
@@ -115,7 +115,8 @@ def git_call(command: str) -> tuple:
         while position < len(tokens):
             token = tokens[position]
             if token == "-C":
-                directory = tokens[position + 1] if position + 1 < len(tokens) else ""
+                value = tokens[position + 1] if position + 1 < len(tokens) else ""
+                directory = os.path.expanduser(value)
                 position += 2
                 continue
             if token in GIT_OPTION_WITH_VALUE:
