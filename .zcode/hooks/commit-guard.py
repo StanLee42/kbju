@@ -166,20 +166,49 @@ def check_commit(command: str = "") -> int:
     return 0
 
 
-def push_targets_main(command: str) -> tuple:
-    """Разбирает команду git push. Возвращает (идёт в main, в обход ветки).
+def git_is_ancestor(older: str, newer: str) -> bool:
+    """Проверяет, что вершина older входит в историю newer."""
+    try:
+        done = subprocess.run(
+            ("git", "merge-base", "--is-ancestor", older, newer),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        return done.returncode == 0
+    except Exception:
+        return True
 
-    Обход — это когда в main кладут чужую ветку: `git push origin feat:main`.
+
+def git_has_object(sha: str) -> bool:
+    try:
+        done = subprocess.run(
+            ("git", "cat-file", "-e", sha), capture_output=True, text=True, timeout=15, check=False
+        )
+        return done.returncode == 0
+    except Exception:
+        return False
+
+
+def push_targets_main(command: str) -> tuple:
+    """Разбирает команду git push. Возвращает (идёт в main, кладёт туда не-main, с силой).
+
+    «Кладёт туда не-main» — это когда содержимое рабочей ветки отправляют прямо в main,
+    минуя слияние: `git push origin feat/x:main`. «С силой» — с ключом --force или -f.
     """
     try:
         tokens = shlex.split(command)
     except Exception:
-        return (False, False)
+        return (False, False, False)
     try:
         index = tokens.index("push")
     except ValueError:
-        return (False, False)
+        return (False, False, False)
 
+    force = any(
+        token in ("--force", "-f") or token.startswith("--force-with-lease") for token in tokens
+    )
     tail = [token for token in tokens[index + 1 :] if not token.startswith("-")]
     pairs = []
     # Первый аргумент без флага — имя удалённого репозитория, дальше идут ссылки.
@@ -194,13 +223,13 @@ def push_targets_main(command: str) -> tuple:
         pairs = [(branch, branch)]
 
     goes_to_main = False
-    bypass = False
+    not_main = False
     for local, remote in pairs:
         if remote in ("main", "refs/heads/main"):
             goes_to_main = True
             if local not in ("main", "refs/heads/main", "HEAD"):
-                bypass = True
-    return (goes_to_main, bypass)
+                not_main = True
+    return (goes_to_main, not_main, force)
 
 
 def run_checks() -> list:
@@ -253,17 +282,29 @@ def check_push() -> int:
     goes_to_main = False
     for row in rows:
         parts = row.split()
-        if len(parts) < 3:
+        if len(parts) < 4:
             continue
-        local_ref, remote_ref = parts[0], parts[2]
+        local_ref, local_sha, remote_ref, remote_sha = parts[0], parts[1], parts[2], parts[3]
         if remote_ref != "refs/heads/main":
             continue
         goes_to_main = True
+
         if local_ref != "refs/heads/main":
             print(
-                "Заблокировано: пуш кладёт в main чужую ветку.\n"
-                f"Локальная ссылка: {local_ref}. Прямой путь в main закрыт: работа вливается\n"
-                "веткой через --no-ff, а затем выкладывается пушем самой ветки main.",
+                "Заблокировано: содержимое рабочей ветки отправляют прямо в main, минуя слияние.\n"
+                f"Локальная ссылка: {local_ref}. Правило: работа вливается в main слиянием\n"
+                "(--no-ff), а затем в main отправляется сама ветка main.",
+                file=sys.stderr,
+            )
+            return 2
+
+        # Перезапись уже отправленной истории: вершина в GitHub не входит в нашу историю.
+        empty = set(remote_sha) <= {"0"}
+        if not empty and git_has_object(remote_sha) and not git_is_ancestor(remote_sha, local_sha):
+            print(
+                "Заблокировано: отправка перезаписала бы историю main в GitHub.\n"
+                f"Вершина в GitHub ({remote_sha[:8]}) не входит в нашу историю. "
+                "Сначала подтяни main, затем повтори.",
                 file=sys.stderr,
             )
             return 2
@@ -275,15 +316,26 @@ def check_push() -> int:
 
 def check_push_command(command: str) -> int:
     """Проверяет команду git push, вызванную агентом."""
-    goes_to_main, bypass = push_targets_main(command)
-    if bypass:
+    goes_to_main, not_main, force = push_targets_main(command)
+
+    if goes_to_main and not_main:
         print(
-            "Заблокировано: команда кладёт в main чужую ветку.\n"
+            "Заблокировано: содержимое рабочей ветки отправляют прямо в main, минуя слияние.\n"
             f"Команда: {command.strip()[:120]}\n"
-            "Работа вливается веткой через --no-ff, а затем выкладывается пушем ветки main.",
+            "Работа вливается в main слиянием (--no-ff), затем в main отправляется ветка main.",
             file=sys.stderr,
         )
         return 2
+
+    if goes_to_main and force:
+        print(
+            "Заблокировано: отправка в main с ключом силы перезаписала бы историю.\n"
+            f"Команда: {command.strip()[:120]}\n"
+            "Если main в GitHub ушёл вперёд, подтяни его и повтори без ключа силы.",
+            file=sys.stderr,
+        )
+        return 2
+
     # Проверки перед отправкой в main прогоняет хук git: он срабатывает всегда, в том числе
     # когда команду даёт агент. Здесь остаются только ограничения.
     return 0
