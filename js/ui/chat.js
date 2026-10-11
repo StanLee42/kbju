@@ -11,6 +11,7 @@ import { addEntry, saveThumb, store } from '../state.js';
 import { sumItems } from '../portion.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, nowTime, round } from '../util.js';
+import { clearChat, loadChat, loadTyped, saveChat, saveTyped } from '../chat-session.js';
 import { createComposer } from './components/composer.js';
 import { openSheet, toast } from './components/sheet.js';
 import { createResultCard } from './result-card.js';
@@ -21,12 +22,24 @@ export function openChatSheet({ date = null } = {}) {
   const targetDate = date || store.date;
   const keyMissing = !providerConfig.key;
 
+  // Разговор возвращается после перезагрузки страницы: приложение перезагружает себя само,
+  // когда на устройство приходит новая сборка. Возвращается только разговор этого дня.
+  const restored = loadChat({ date: targetDate });
+
   const state = {
-    messages: [], // { role, text, photo, analysis, error }
-    draft: null, // последний разбор: уходит модели следующим сообщением
-    current: null, // текущие значения: позиции, итог, множитель (их и записываем)
-    cost: 0,
+    messages: restored?.messages || [], // { role, text, photo, analysis, error }
+    draft: restored?.draft || null, // последний разбор: уходит модели следующим сообщением
+    current: restored?.current || null, // текущие значения: позиции, итог, множитель (их и записываем)
+    cost: restored?.cost || 0,
   };
+
+  // Числа для записи берутся с полосы, а карточка в переписке строится по разбору последнего
+  // сообщения. После перезагрузки правим разбор по полосе, иначе на экране были бы две
+  // разные версии одного разбора.
+  if (state.current?.items?.length) {
+    const last = [...state.messages].reverse().find((message) => message.analysis);
+    if (last) last.analysis = { ...last.analysis, items: state.current.items };
+  }
 
   const thread = h('div', { class: 'thread' });
   const draftBar = h('div', { class: 'draft-bar', hidden: true });
@@ -36,6 +49,8 @@ export function openChatSheet({ date = null } = {}) {
   const input = createComposer({
     placeholder: 'Что вы съели',
     placeholderWithDraft: 'Уточните, если нужно',
+    initialText: loadTyped({ date: targetDate }),
+    onTyped: (text) => saveTyped(text, { date: targetDate }),
     keyWarning: keyMissing
       ? 'Ключ провайдера не заполнен: посчитать не получится. Заполните ключ в настройках.'
       : null,
@@ -96,6 +111,7 @@ export function openChatSheet({ date = null } = {}) {
           onChange: (values) => {
             state.current = values;
             renderDraftBar();
+            persist();
           },
         }).element);
     }
@@ -144,6 +160,21 @@ export function openChatSheet({ date = null } = {}) {
     renderDraftBar();
     input.setHasDraft(Boolean(state.current));
     thread.scrollTop = thread.scrollHeight;
+    persist();
+  }
+
+  /**
+   * Кладёт разговор в хранилище. Перезагрузка страницы приходит сама вместе с новой сборкой,
+   * и разговор должен пережить её целиком.
+   */
+  function persist() {
+    saveChat({
+      date: targetDate,
+      messages: state.messages,
+      draft: state.draft,
+      current: state.current,
+      cost: state.cost,
+    });
   }
 
   // --- шаги ---
@@ -276,6 +307,8 @@ export function openChatSheet({ date = null } = {}) {
     });
 
     toast('Записано');
+    // Блюдо записано: разговор закончен, возвращать его незачем.
+    clearChat();
     sheet.close();
   }
 

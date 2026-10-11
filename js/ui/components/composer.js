@@ -10,22 +10,32 @@ import { toast } from './sheet.js';
 export function createComposer({
   placeholder = 'Напишите сообщение',
   placeholderWithDraft = null,
+  initialText = '',
   note = null,
   keyWarning = null,
   extra = null,
   onSend,
+  onTyped = null,
   onAttachError = null,
 } = {}) {
-  const state = { text: '', photo: null, preview: null, busy: false, hasDraft: false };
+  const state = { text: initialText, photo: null, preview: null, busy: false, hasDraft: false };
 
   // Поле одно на всё время: пересоздание во время набора закрывает клавиатуру.
   const input = h('textarea', {
     class: 'composer-input', rows: 2,
     spellcheck: false,
-    oninput: (event) => { state.text = event.target.value; },
+    oninput: (event) => { state.text = event.target.value; notifyTyped(); },
   });
 
   const host = h('div', {});
+
+  /**
+   * Сообщает наружу о набранном. Набранное сохраняется, не дожидаясь отправки: страница
+   * перезагружается сама, когда на устройство приходит новая сборка.
+   */
+  function notifyTyped() {
+    if (onTyped) onTyped(state.text);
+  }
 
   function renderPhoto() {
     return state.preview
@@ -106,6 +116,7 @@ export function createComposer({
     state.photo = null;
     state.preview = null;
     render();
+    notifyTyped();
     await onSend({ text: sent, photo });
   }
 
@@ -122,6 +133,7 @@ export function createComposer({
       state.photo = null;
       state.preview = null;
       render();
+      notifyTyped();
       return payload;
     },
     setBusy(value) {
