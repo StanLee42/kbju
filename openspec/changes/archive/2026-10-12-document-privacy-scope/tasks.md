@@ -4,8 +4,8 @@
 
 ### Файлы
 
-- `openspec/changes/document-privacy-scope/` — предложение, задачи, дельта спецификации
-- `openspec/specs/document-privacy/spec.md` — итог после архивации
+- `openspec/changes/document-privacy-scope/`: предложение, задачи, дельта спецификации
+- `openspec/specs/document-privacy/spec.md`: итог после архивации
 
 ### Порядок
 
