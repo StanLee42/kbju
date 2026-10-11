@@ -29,7 +29,7 @@ export function openChatSheet({ date = null } = {}) {
   const state = {
     messages: restored?.messages || [], // { role, text, photo, analysis, error }
     draft: restored?.draft || null, // последний разбор: уходит модели следующим сообщением
-    current: restored?.current || null, // текущие значения: позиции, итог, множитель (их и записываем)
+    current: restored?.current || null, // текущие значения: позиции и итог (их и записываем)
     cost: restored?.cost || 0,
   };
 
@@ -137,7 +137,7 @@ export function openChatSheet({ date = null } = {}) {
       fill(draftBar);
       return;
     }
-    const { totals, portionNote } = state.current;
+    const { totals } = state.current;
     draftBar.hidden = false;
     fill(draftBar,
       h('div', { class: 'grow' },
@@ -145,7 +145,6 @@ export function openChatSheet({ date = null } = {}) {
         h('div', { class: 'tiny faint' },
           `${round(totals.grams)} г · ${round(totals.kcal)} ккал · Б ${round(totals.protein)}`
           + ` · Ж ${round(totals.fat)} · У ${round(totals.carbs)}`
-          + (portionNote ? ` · ${portionNote}` : '')
           + (state.cost ? ` · разговор ${state.cost.toFixed(5)} $` : ''))),
       h('button', {
         class: 'btn-primary draft-save', type: 'button', text: 'В дневник',
@@ -258,9 +257,6 @@ export function openChatSheet({ date = null } = {}) {
       state.current = {
         items: result.data.items,
         totals: sumItems(result.data.items),
-        factor: 1,
-        portion: 'all',
-        portionNote: '',
       };
     }
     state.messages.push({ role: 'assistant', analysis: { ...result.data, cost } });
@@ -302,7 +298,6 @@ export function openChatSheet({ date = null } = {}) {
       basis: analysis.basis,
       confidence: analysis.confidence,
       assumptions: analysis.assumptions,
-      portionNote: values.portionNote,
       cost: state.cost,
     });
 

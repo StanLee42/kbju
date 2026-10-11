@@ -8,8 +8,6 @@ import { mergeEntries } from '../merge.js';
 import { openAddSheet } from './add.js';
 import { openEntryDetails } from './result-card.js';
 
-const PORTION_LABEL = { small: 'маленькая порция', normal: '', large: 'большая порция' };
-
 export function mount(container) {
   const title = h('h1', { text: 'Сегодня' });
   const subtitle = h('div', { class: 'muted small' });
@@ -159,9 +157,7 @@ export function mount(container) {
     renderMergeBar();
 
     fill(feed, ...entries.map((entry) => {
-      const portion = PORTION_LABEL[entry.portion] || '';
-      const sub = [entry.grams ? `${round(entry.grams)} г` : '', portion, entry.portionNote]
-        .filter(Boolean).join(' · ');
+      const sub = entry.grams ? `${round(entry.grams)} г` : '';
       const marked = selection.ids.has(entry.id);
       // В режиме отметки касание выбирает запись для объединения, а не открывает её.
       const open = () => {

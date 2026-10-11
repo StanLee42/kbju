@@ -92,9 +92,6 @@ function cleanCurrent(value) {
   return {
     items: value.items,
     totals: value.totals,
-    factor: numberOr(value.factor, 1),
-    portion: typeof value.portion === 'string' ? value.portion : 'all',
-    portionNote: typeof value.portionNote === 'string' ? value.portionNote : '',
   };
 }
 

@@ -34,9 +34,6 @@ const analysis = {
 const current = {
   items,
   totals: { grams: 300, kcal: 120, protein: 5, fat: 4, carbs: 12 },
-  factor: 1,
-  portion: 'all',
-  portionNote: '',
 };
 
 test('разговор возвращается после перезагрузки целиком', () => {

@@ -236,9 +236,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 
-.portion-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-
-.portion-row button,
 .btn {
   background: var(--bg-elev-2);
   border: 1px solid var(--line);
@@ -246,12 +243,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   border-radius: var(--radius-sm);
   padding: 11px 12px;
   cursor: pointer;
-}
-
-.portion-row button[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev-2));
-  font-weight: 600;
 }
 
 .btn-primary {
