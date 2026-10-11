@@ -7,6 +7,10 @@
    списка .misc/private-values.txt и строки, похожие на отчёт с измерениями.
 3. Пуш, который кладёт в main чужую ветку в обход слияния, запрещён.
 
+Каталог коммита берётся из самой команды (`cd <путь>` и `git -C <путь>`). Команду дают
+из одного рабочего каталога, а коммит может идти в соседний ворктри, и тогда ветка, индекс
+и список значений берутся из каталога коммита, а не из каталога вызова.
+
 Режимы вызова:
   zcode       — хук ZCode: описание вызова приходит в JSON на стандартный вход;
   pre-commit  — хук git перед коммитом;
@@ -61,21 +65,74 @@ def read_command() -> str:
     return ""
 
 
-def git(*args: str) -> str:
+def git(*args: str, cwd: str = "") -> str:
     try:
         done = subprocess.run(
-            ("git",) + args, capture_output=True, text=True, timeout=15, check=False
+            ("git",) + args,
+            cwd=cwd or None,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
         )
         return done.stdout
     except Exception:
         return ""
 
 
-def staged_diff(command: str) -> str:
-    parts = [git("diff", "--cached", "--unified=0")]
+SEGMENT_SPLIT = re.compile(r"&&|;|\|\|?")
+GIT_OPTION_WITH_VALUE = ("-c", "--git-dir", "--work-tree", "--namespace", "--exec-path")
+
+
+def git_call(command: str) -> tuple:
+    """Разбирает команду. Возвращает (каталог, подкоманда, аргументы подкоманды).
+
+    Каталог берётся из `cd <путь>` в том же куске команды и из ключа `-C <путь>`.
+    Он важнее каталога вызова сторожа: команду дают из одного рабочего каталога, а коммит
+    может идти в соседний. Так работает ворктри, и без этого разбора сторож судил бы коммит
+    в ворктри по ветке того каталога, откуда позвали.
+    """
+    directory = ""
+    for segment in [part.strip() for part in SEGMENT_SPLIT.split(command) if part.strip()]:
+        try:
+            tokens = shlex.split(segment)
+        except Exception:
+            continue
+        start = 0
+        # Каталог переходит из куска в кусок: `cd <путь> && git commit` это две части.
+        if len(tokens) > 1 and tokens[0] == "cd":
+            directory = tokens[1]
+            start = 2
+        git_at = None
+        for position in range(start, len(tokens)):
+            if tokens[position] == "git" or tokens[position].endswith("/git"):
+                git_at = position
+                break
+        if git_at is None:
+            continue
+
+        position = git_at + 1
+        while position < len(tokens):
+            token = tokens[position]
+            if token == "-C":
+                directory = tokens[position + 1] if position + 1 < len(tokens) else ""
+                position += 2
+                continue
+            if token in GIT_OPTION_WITH_VALUE:
+                position += 2
+                continue
+            if token.startswith("-"):
+                position += 1
+                continue
+            return (directory, token, tokens[position + 1 :])
+    return ("", "", [])
+
+
+def staged_diff(command: str, cwd: str = "") -> str:
+    parts = [git("diff", "--cached", "--unified=0", cwd=cwd)]
     # При `git commit -a` в коммит уходят и правки рабочего дерева, не попавшие в индекс.
     if " -a" in command or "--all" in command or "-am" in command:
-        parts.append(git("diff", "--unified=0"))
+        parts.append(git("diff", "--unified=0", cwd=cwd))
     return "\n".join(parts)
 
 
@@ -87,8 +144,11 @@ def added_lines(diff: str) -> list:
     ]
 
 
-def load_values() -> list:
-    path = os.environ.get("KBJU_VALUES_FILE") or ".misc/private-values.txt"
+def load_values(directory: str = "") -> list:
+    """Список значений владельца. Без переменной окружения читается из каталога коммита."""
+    path = os.environ.get("KBJU_VALUES_FILE") or os.path.join(
+        directory, ".misc/private-values.txt"
+    )
     if not os.path.exists(path):
         return []
     values = []
@@ -103,11 +163,11 @@ def load_values() -> list:
     return values
 
 
-def find_values(diff: str) -> list:
+def find_values(diff: str, directory: str = "") -> list:
     """Точная проверка: значения из списка владельца. Это блокирующая проверка."""
     lines = added_lines(diff)
     found = []
-    for value in load_values():
+    for value in load_values(directory):
         pattern = re.compile(r"(?<![\d.,])" + re.escape(value) + r"(?![\d.,])")
         for line in lines:
             if pattern.search(line):
@@ -133,8 +193,9 @@ def find_report_like(diff: str) -> list:
 
 
 def check_commit(command: str = "") -> int:
-    branch = git("rev-parse", "--abbrev-ref", "HEAD").strip()
-    merging = git("rev-parse", "-q", "--verify", "MERGE_HEAD").strip()
+    directory, _, _ = git_call(command)
+    branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=directory).strip()
+    merging = git("rev-parse", "-q", "--verify", "MERGE_HEAD", cwd=directory).strip()
     if branch == "main" and not merging:
         print(
             "Заблокировано: прямой коммит в main.\n"
@@ -144,8 +205,8 @@ def check_commit(command: str = "") -> int:
         )
         return 2
 
-    diff = staged_diff(command)
-    values = find_values(diff)
+    diff = staged_diff(command, directory)
+    values = find_values(diff, directory)
     if values:
         print(
             "Заблокировано: в коммите персональные данные владельца.\n"
@@ -191,7 +252,7 @@ def git_has_object(sha: str) -> bool:
         return False
 
 
-def push_targets_main(command: str) -> tuple:
+def push_targets_main(command: str, cwd: str = "") -> tuple:
     """Разбирает команду git push. Возвращает (идёт в main, кладёт туда не-main, с силой).
 
     «Кладёт туда не-main» — это когда содержимое рабочей ветки отправляют прямо в main,
@@ -219,7 +280,7 @@ def push_targets_main(command: str) -> tuple:
             local = remote = token
         pairs.append((local.strip(), remote.strip()))
     if not pairs:
-        branch = git("rev-parse", "--abbrev-ref", "HEAD").strip()
+        branch = git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd).strip()
         pairs = [(branch, branch)]
 
     goes_to_main = False
@@ -316,7 +377,8 @@ def check_push() -> int:
 
 def check_push_command(command: str) -> int:
     """Проверяет команду git push, вызванную агентом."""
-    goes_to_main, not_main, force = push_targets_main(command)
+    directory, _, _ = git_call(command)
+    goes_to_main, not_main, force = push_targets_main(command, directory)
 
     if goes_to_main and not_main:
         print(
@@ -352,9 +414,10 @@ def main() -> int:
         if not command:
             # Запуск без описания вызова: считаем, что это коммит.
             return check_commit()
-        if "git commit" in command:
+        _, verb, _ = git_call(command)
+        if verb == "commit":
             return check_commit(command)
-        if "git push" in command:
+        if verb == "push":
             return check_push_command(command)
         return 0
     print(f"Неизвестный режим: {mode}", file=sys.stderr)
