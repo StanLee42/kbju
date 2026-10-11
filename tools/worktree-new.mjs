@@ -101,7 +101,7 @@ async function main() {
     process.exit(1);
   }
   if (git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`).status === 0) {
-    console.error(`Ветка ${branch} уже есть. Для неё нужен другой каталог.`);
+    console.error(`Ветка ${branch} уже есть. Возьми другое имя ветки.`);
     process.exit(1);
   }
   if (git('rev-parse', '--verify', '--quiet', `refs/heads/${base}`).status !== 0) {
