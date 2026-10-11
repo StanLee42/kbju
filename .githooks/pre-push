@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Хук git перед пушем. Закрывает обход: пуш чужой ветки прямо в main.
+# Включается один раз в каждом рабочем каталоге: git config core.hooksPath .githooks
+set -u
+root="$(git rev-parse --show-toplevel)"
+exec python3 "$root/.zcode/hooks/commit-guard.py" pre-push

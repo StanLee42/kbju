@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "enabled": true,
+    "timeoutMs": 20000,
+    "events": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "python3",
+              "args": ["${ZCODE_PROJECT_DIR}/.zcode/hooks/commit-guard.py"],
+              "statusMessage": "Проверяю политики коммита",
+              "timeoutMs": 15000
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Хук git перед коммитом. Логика лежит рядом с хуками ZCode, чтобы правило было одно.
+# Включается один раз в каждом рабочем каталоге: git config core.hooksPath .githooks
+set -u
+root="$(git rev-parse --show-toplevel)"
+exec python3 "$root/.zcode/hooks/commit-guard.py" pre-commit
