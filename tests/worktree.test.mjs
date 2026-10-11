@@ -3,12 +3,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
 
-import { checkBranchName, directoryName, firstFreePort, isPortFree } from '../tools/worktree-new.mjs';
+import {
+  checkBranchName,
+  hasWorktreeIgnore,
+  firstFreePort,
+  isPortFree,
+  worktreePath,
+} from '../tools/worktree-new.mjs';
 
-test('каталог называется kbju-<имя> и не повторяет вид работы', () => {
-  assert.equal(directoryName('ai/my-products'), 'kbju-my-products');
-  assert.equal(directoryName('feat/worktree-new'), 'kbju-worktree-new');
-  assert.equal(directoryName('fix/build-info'), 'kbju-build-info');
+test('каталог ставится внутрь репозитория, туда же, где держит ворктри Claude Code', () => {
+  assert.equal(worktreePath('/repo', 'ai/my-products'), '/repo/.claude/worktrees/my-products');
+  assert.equal(worktreePath('/repo', 'feat/worktree-new'), '/repo/.claude/worktrees/worktree-new');
+  assert.equal(worktreePath('/repo', 'fix/build-info'), '/repo/.claude/worktrees/build-info');
+});
+
+test('запись в .gitignore узнаётся по точной строке', () => {
+  assert.equal(hasWorktreeIgnore('.misc/\n.claude/worktrees/\n'), true);
+  assert.equal(hasWorktreeIgnore('  .claude/worktrees/  \n'), true);
+  assert.equal(hasWorktreeIgnore('.misc/\ndist/\n'), false);
+  assert.equal(hasWorktreeIgnore('.claude/worktrees/probe/\n'), false);
 });
 
 test('имя ветки принимает четыре вида работы', () => {

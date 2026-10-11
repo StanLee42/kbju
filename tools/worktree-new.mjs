@@ -1,7 +1,10 @@
 // Создание рабочего каталога (worktree) под новую фичу.
 //
 // Правило репозитория: каждая фича живёт в своей ветке и своём каталоге, а сессия
-// открывается в этом каталоге. Каталог ставится рядом с главным и называется `kbju-<имя>`.
+// открывается в этом каталоге. Каталог ставится внутри репозитория, в `.claude/worktrees/<имя>`:
+// там же держит свои ворктри Claude Code, и каталог записан в `.gitignore`. Вложенный каталог
+// не мешает проверкам: `node --test` пропускает каталоги, чьё имя начинается с точки.
+//
 // Часть знаний в новый каталог сама не переезжает, поэтому скрипт закрывает её сразу:
 //
 // 1. Внегитовые файлы. `.env.local` хранит ключ провайдера, `.misc/` хранит `private-values.txt`
@@ -12,7 +15,7 @@
 //    однажды узнать об отключённой защите.
 //
 // Запуск: node tools/worktree-new.mjs feat/<имя> [базовая ветка]
-import { cpSync, existsSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -25,6 +28,7 @@ const BRANCH = new RegExp(`^(${KINDS.join('|')})/[a-z0-9][a-z0-9-]*$`);
 const PORT_START = 8766;
 const PORT_TRIES = 20;
 const UNTRACKED = ['.env.local', '.misc'];
+const WORKTREES = '.claude/worktrees';
 
 export function checkBranchName(branch) {
   const kinds = KINDS.map((kind) => `${kind}/<имя>`).join(', ');
@@ -37,8 +41,12 @@ export function checkBranchName(branch) {
   return null;
 }
 
-export function directoryName(branch) {
-  return `kbju-${branch.split('/')[1]}`;
+export function worktreePath(base, branch) {
+  return join(base, WORKTREES, branch.split('/')[1]);
+}
+
+export function hasWorktreeIgnore(text) {
+  return text.split('\n').some((line) => line.trim() === `${WORKTREES}/`);
 }
 
 export function isPortFree(port) {
@@ -85,6 +93,12 @@ function git(...args) {
   return spawnSync('git', args, { cwd: root, encoding: 'utf8' });
 }
 
+function ignored() {
+  const file = join(root, '.gitignore');
+  if (!existsSync(file)) return false;
+  return hasWorktreeIgnore(readFileSync(file, 'utf8'));
+}
+
 async function main() {
   const branch = process.argv[2];
   const base = process.argv[3] || 'main';
@@ -95,7 +109,7 @@ async function main() {
     process.exit(1);
   }
 
-  const dir = resolve(root, '..', directoryName(branch));
+  const dir = worktreePath(root, branch);
   if (existsSync(dir)) {
     console.error(`Каталог уже занят: ${dir}`);
     process.exit(1);
@@ -109,6 +123,7 @@ async function main() {
     process.exit(1);
   }
 
+  mkdirSync(dirname(dir), { recursive: true });
   const created = spawnSync('git', ['worktree', 'add', '-b', branch, dir, base], {
     cwd: root,
     stdio: 'inherit',
@@ -134,6 +149,9 @@ async function main() {
       ? 'хуки: на месте, pre-commit отвечает'
       : 'хуки: pre-commit не найден, проверь .githooks',
   );
+  if (!ignored()) {
+    console.log(`внимание: в .gitignore нет строки ${WORKTREES}/, каталог будет виден как чужой`);
+  }
   console.log('\nДальше: открой сессию ZCode в этом каталоге и подними сервер.');
   console.log(`  cd ${dir} && python3 -m http.server ${port ?? PORT_START}`);
 }
