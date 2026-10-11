@@ -44,7 +44,14 @@ export function openChatSheet({ date = null } = {}) {
   const thread = h('div', { class: 'thread' });
   const draftBar = h('div', { class: 'draft-bar', hidden: true });
   const host = h('div', {}, thread, draftBar);
-  const sheet = openSheet({ title: 'Добавить еду', content: host });
+  const sheet = openSheet({
+    title: 'Добавить еду',
+    content: host,
+    // Закрытие окна заканчивает разговор, каким бы способом его ни закрыли: кнопкой «В дневник»,
+    // касанием мимо окна, клавишей Escape, системной кнопкой «назад» или переходом в другое окно.
+    // Следующее открытие окна начинается с чистого листа.
+    onClose: () => clearChat(),
+  });
 
   const input = createComposer({
     placeholder: 'Что вы съели',
@@ -55,7 +62,8 @@ export function openChatSheet({ date = null } = {}) {
       ? 'Ключ провайдера не заполнен: посчитать не получится. Заполните ключ в настройках.'
       : null,
     note: 'Разговор можно вести сколько нужно: блюдо попадает в дневник только по кнопке '
-      + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится.',
+      + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится, '
+      + 'а разговор начнётся заново.',
     onSend: async ({ text, photo }) => {
       const before = history();
       state.messages.push({
@@ -167,6 +175,9 @@ export function openChatSheet({ date = null } = {}) {
    * и разговор должен пережить её целиком.
    */
   function persist() {
+    // Окно закрыли, значит разговор закончен: ответ модели может прийти уже после закрытия,
+    // и записывать его незачем.
+    if (!sheet.opened) return;
     saveChat({
       date: targetDate,
       messages: state.messages,
@@ -302,8 +313,7 @@ export function openChatSheet({ date = null } = {}) {
     });
 
     toast('Записано');
-    // Блюдо записано: разговор закончен, возвращать его незачем.
-    clearChat();
+    // Окно закрывается, и разговор заканчивается: блюдо записано, возвращать разговор незачем.
     sheet.close();
   }
 
