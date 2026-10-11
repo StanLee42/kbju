@@ -60,9 +60,6 @@ export function mergeEntries(entries = []) {
     basis: first.basis || null,
     confidence: first.confidence || null,
     assumptions: sorted.map((entry) => String(entry.assumptions || '').trim()).filter(Boolean).join(' '),
-    portion: 'normal',
-    portionNote: '',
-    base: null,
     cost: round(sorted.reduce((acc, entry) => acc + (Number(entry.cost) || 0), 0), 5),
   };
 }
@@ -94,9 +91,6 @@ export function splitEntry(entry) {
     basis: entry.basis || null,
     confidence: entry.confidence || null,
     assumptions: '',
-    portion: 'normal',
-    portionNote: '',
-    base: null,
     // Стоимость разговора относилась ко всему приёму: при разделении её не размазываем.
     cost: 0,
   }));

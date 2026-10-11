@@ -1,24 +1,12 @@
-// Шторка добавления и правки записи. Здесь же выбор порции: множитель
-// применяется к введённым числам, а базовые значения хранятся отдельно,
-// чтобы при правке ничего не умножалось дважды.
+// Шторка добавления и правки записи. Числа вводятся как есть: множителя размера порции нет,
+// поэтому в записи лежат те же числа, что человек набрал.
 import { addEntry, deleteEntry, store, updateEntry } from '../state.js';
 import { h, nowTime, num, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
 
-const PORTIONS = [
-  { id: 'small', label: 'Мало', multiplier: 0.7 },
-  { id: 'normal', label: 'Средне', multiplier: 1 },
-  { id: 'large', label: 'Много', multiplier: 1.4 },
-];
-
-const multiplierOf = (id) => PORTIONS.find((item) => item.id === id)?.multiplier ?? 1;
-
 export function openAddSheet({ entry = null, date = null } = {}) {
   const isEdit = Boolean(entry);
   const targetDate = entry?.date || date || store.date;
-  const base = entry?.base || entry || {};
-
-  let portion = entry?.portion || 'normal';
 
   const nameInput = h('input', {
     type: 'text', placeholder: 'Например: борщ со сметаной', value: entry?.name || '',
@@ -37,7 +25,7 @@ export function openAddSheet({ entry = null, date = null } = {}) {
 
   const numberField = (key, placeholder) => h('input', {
     type: 'number', inputmode: 'decimal', placeholder,
-    value: base[key] === undefined || base[key] === null || base[key] === '' ? '' : round(base[key], 1),
+    value: entry?.[key] === undefined || entry?.[key] === null || entry?.[key] === '' ? '' : round(entry[key], 1),
   });
 
   const kcalInput = numberField('kcal', '0');
@@ -52,21 +40,6 @@ export function openAddSheet({ entry = null, date = null } = {}) {
 
   const preview = h('div', { class: 'small muted', style: 'margin-top:10px' });
 
-  const portionButtons = PORTIONS.map((item) => h('button', {
-    type: 'button',
-    text: item.label,
-    'aria-pressed': String(item.id === portion),
-    onclick: () => {
-      portion = item.id;
-      portionButtons.forEach((button) => {
-        const id = button.dataset.portion;
-        button.setAttribute('aria-pressed', String(id === portion));
-      });
-      updatePreview();
-    },
-  }));
-  portionButtons.forEach((button, index) => { button.dataset.portion = PORTIONS[index].id; });
-
   function collect() {
     return {
       kcal: num(kcalInput.value),
@@ -76,23 +49,9 @@ export function openAddSheet({ entry = null, date = null } = {}) {
     };
   }
 
-  function scaledValues() {
-    const factor = multiplierOf(portion);
-    const raw = collect();
-    return {
-      kcal: raw.kcal * factor,
-      protein: raw.protein * factor,
-      fat: raw.fat * factor,
-      carbs: raw.carbs * factor,
-    };
-  }
-
   function updatePreview() {
-    const factor = multiplierOf(portion);
-    const value = scaledValues();
-    preview.textContent = factor === 1
-      ? `Итого: ${round(value.kcal)} ккал · Б ${round(value.protein)} · Ж ${round(value.fat)} · У ${round(value.carbs)}`
-      : `Множитель ×${factor}: ${round(value.kcal)} ккал · Б ${round(value.protein)} · Ж ${round(value.fat)} · У ${round(value.carbs)}`;
+    const value = collect();
+    preview.textContent = `Итого: ${round(value.kcal)} ккал · Б ${round(value.protein)} · Ж ${round(value.fat)} · У ${round(value.carbs)}`;
   }
 
   [kcalInput, proteinInput, fatInput, carbsInput].forEach((input) => {
@@ -111,17 +70,13 @@ export function openAddSheet({ entry = null, date = null } = {}) {
         toast('Название не заполнено');
         return;
       }
-      const raw = collect();
-      const value = scaledValues();
       const payload = {
         date: targetDate,
         time: timeInput.value || nowTime(),
         name,
         grams: gramsInput.value === '' ? null : num(gramsInput.value),
         comment: commentInput.value.trim(),
-        portion,
-        base: raw,
-        ...value,
+        ...collect(),
       };
 
       if (isEdit) {
@@ -160,9 +115,6 @@ export function openAddSheet({ entry = null, date = null } = {}) {
     h('div', { class: 'grid-2' },
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Время' }), timeInput),
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Вес, г' }), gramsInput)),
-    h('div', { class: 'field' },
-      h('span', { class: 'field-label', text: 'Порция' }),
-      h('div', { class: 'portion-row' }, portionButtons)),
     h('div', { class: 'grid-4' },
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Ккал' }), kcalInput),
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Б' }), proteinInput),
