@@ -11,17 +11,17 @@ import {
   worktreePath,
 } from '../tools/worktree-new.mjs';
 
-test('каталог ставится внутрь репозитория, туда же, где держит ворктри Claude Code', () => {
-  assert.equal(worktreePath('/repo', 'ai/my-products'), '/repo/.claude/worktrees/my-products');
-  assert.equal(worktreePath('/repo', 'feat/worktree-new'), '/repo/.claude/worktrees/worktree-new');
-  assert.equal(worktreePath('/repo', 'fix/build-info'), '/repo/.claude/worktrees/build-info');
+test('каталог ставится внутрь репозитория, под нейтральным именем', () => {
+  assert.equal(worktreePath('/repo', 'ai/my-products'), '/repo/.worktrees/my-products');
+  assert.equal(worktreePath('/repo', 'feat/worktree-new'), '/repo/.worktrees/worktree-new');
+  assert.equal(worktreePath('/repo', 'fix/build-info'), '/repo/.worktrees/build-info');
 });
 
 test('запись в .gitignore узнаётся по точной строке', () => {
-  assert.equal(hasWorktreeIgnore('.misc/\n.claude/worktrees/\n'), true);
-  assert.equal(hasWorktreeIgnore('  .claude/worktrees/  \n'), true);
+  assert.equal(hasWorktreeIgnore('.misc/\n.worktrees/\n'), true);
+  assert.equal(hasWorktreeIgnore('  .worktrees/  \n'), true);
   assert.equal(hasWorktreeIgnore('.misc/\ndist/\n'), false);
-  assert.equal(hasWorktreeIgnore('.claude/worktrees/probe/\n'), false);
+  assert.equal(hasWorktreeIgnore('.worktrees/probe/\n'), false);
 });
 
 test('имя ветки принимает четыре вида работы', () => {
