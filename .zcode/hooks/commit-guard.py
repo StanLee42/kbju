@@ -20,6 +20,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -165,18 +166,100 @@ def check_commit(command: str = "") -> int:
     return 0
 
 
+def push_targets_main(command: str) -> tuple:
+    """Разбирает команду git push. Возвращает (идёт в main, в обход ветки).
+
+    Обход — это когда в main кладут чужую ветку: `git push origin feat:main`.
+    """
+    try:
+        tokens = shlex.split(command)
+    except Exception:
+        return (False, False)
+    try:
+        index = tokens.index("push")
+    except ValueError:
+        return (False, False)
+
+    tail = [token for token in tokens[index + 1 :] if not token.startswith("-")]
+    pairs = []
+    # Первый аргумент без флага — имя удалённого репозитория, дальше идут ссылки.
+    for token in tail[1:]:
+        if ":" in token:
+            local, remote = token.split(":", 1)
+        else:
+            local = remote = token
+        pairs.append((local.strip(), remote.strip()))
+    if not pairs:
+        branch = git("rev-parse", "--abbrev-ref", "HEAD").strip()
+        pairs = [(branch, branch)]
+
+    goes_to_main = False
+    bypass = False
+    for local, remote in pairs:
+        if remote in ("main", "refs/heads/main"):
+            goes_to_main = True
+            if local not in ("main", "refs/heads/main", "HEAD"):
+                bypass = True
+    return (goes_to_main, bypass)
+
+
+def run_checks() -> list:
+    """Прогоняет проверки репозитория. Возвращает список провалов."""
+    failures = []
+    for title, command in (
+        ("тесты", ["node", "--test"]),
+        ("спецификации", ["openspec", "validate", "--all", "--strict"]),
+    ):
+        try:
+            done = subprocess.run(
+                command, capture_output=True, text=True, timeout=300, check=False
+            )
+        except FileNotFoundError:
+            print(
+                f"Внимание: {command[0]} не найдена, проверка «{title}» пропущена.",
+                file=sys.stderr,
+            )
+            continue
+        except Exception as error:
+            print(f"Внимание: проверка «{title}» не запустилась: {error}", file=sys.stderr)
+            continue
+        if done.returncode != 0:
+            tail = (done.stdout or "")[-1200:] + (done.stderr or "")[-600:]
+            failures.append(f"{title}:\n{tail.strip()}")
+    return failures
+
+
+def verify_before_main() -> int:
+    """Перед отправкой в main проверки должны пройти здесь, а не только в CI."""
+    failures = run_checks()
+    if failures:
+        print(
+            "Заблокировано: проверки перед отправкой в main не прошли.\n"
+            + "\n".join(failures)
+            + "\nПочини и повтори.",
+            file=sys.stderr,
+        )
+        return 2
+    return 0
+
+
 def check_push() -> int:
     """Разбирает строки хука pre-push: локальная ссылка, хеш, удалённая ссылка, хеш."""
     try:
         rows = sys.stdin.read().splitlines()
     except Exception:
         return 0
+
+    goes_to_main = False
     for row in rows:
         parts = row.split()
         if len(parts) < 3:
             continue
         local_ref, remote_ref = parts[0], parts[2]
-        if remote_ref == "refs/heads/main" and local_ref != "refs/heads/main":
+        if remote_ref != "refs/heads/main":
+            continue
+        goes_to_main = True
+        if local_ref != "refs/heads/main":
             print(
                 "Заблокировано: пуш кладёт в main чужую ветку.\n"
                 f"Локальная ссылка: {local_ref}. Прямой путь в main закрыт: работа вливается\n"
@@ -184,6 +267,25 @@ def check_push() -> int:
                 file=sys.stderr,
             )
             return 2
+
+    if goes_to_main:
+        return verify_before_main()
+    return 0
+
+
+def check_push_command(command: str) -> int:
+    """Проверяет команду git push, вызванную агентом."""
+    goes_to_main, bypass = push_targets_main(command)
+    if bypass:
+        print(
+            "Заблокировано: команда кладёт в main чужую ветку.\n"
+            f"Команда: {command.strip()[:120]}\n"
+            "Работа вливается веткой через --no-ff, а затем выкладывается пушем ветки main.",
+            file=sys.stderr,
+        )
+        return 2
+    # Проверки перед отправкой в main прогоняет хук git: он срабатывает всегда, в том числе
+    # когда команду даёт агент. Здесь остаются только ограничения.
     return 0
 
 
@@ -195,10 +297,14 @@ def main() -> int:
         return check_push()
     if mode == "zcode":
         command = read_command()
-        # Пустая команда означает запуск без описания вызова: считаем, что это коммит.
-        if command and "git commit" not in command:
-            return 0
-        return check_commit(command)
+        if not command:
+            # Запуск без описания вызова: считаем, что это коммит.
+            return check_commit()
+        if "git commit" in command:
+            return check_commit(command)
+        if "git push" in command:
+            return check_push_command(command)
+        return 0
     print(f"Неизвестный режим: {mode}", file=sys.stderr)
     return 1
 
