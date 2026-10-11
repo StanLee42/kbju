@@ -1,9 +1,9 @@
 // Карточка разбора: разговор про еду и разбор снимка приводят к одному и тому же —
-// название блюда, позиции с числами, выбор «сколько съедено», итог и сохранение в дневник.
+// название блюда, позиции с числами, итог и сохранение в дневник.
 //
 // Живёт отдельно, потому что иначе правки в ней пришлось бы повторять в двух местах,
 // а расхождение между разговором и снимком в дневнике выглядело бы как ошибка.
-import { PORTION_PRESETS, portionFactor, portionNote, scaleItems, sumItems } from '../portion.js';
+import { sumItems } from '../portion.js';
 import { fill, h, num, round } from '../util.js';
 import { addEntry, deleteEntry, loadThumb } from '../state.js';
 import { splitEntry } from '../merge.js';
@@ -25,7 +25,7 @@ function sourceLine(analysis, origin) {
 }
 
 /**
- * Собирает карточку с правкой позиций и выбором порции.
+ * Собирает карточку с правкой позиций.
  *
  * @param {object} options
  * @param {object} options.analysis разобранный ответ модели
@@ -34,7 +34,7 @@ function sourceLine(analysis, origin) {
  * @param {string} options.origin 'photo' | 'chat' — как подписывать источник чисел
  * @param {string} options.retryLabel как называется кнопка возврата к вводу
  * @param {Function} options.onRetry
- * @param {Function|null} options.onSave получает готовые к записи позиции, множитель и итог;
+ * @param {Function|null} options.onSave получает готовые к записи позиции и итог;
  *   если не передан, кнопки сохранения в карточке нет
  * @param {Function} options.onChange сообщает текущие значения после каждой правки:
  *   по ним показывается черновик, пока разговор продолжается
@@ -46,47 +46,31 @@ export function createResultCard({
 }) {
   const state = {
     items: (items || []).map((item) => ({ ...item })),
-    portion: 'all',
-    customGrams: null,
   };
 
   const totalsNode = h('div', { class: 'small', style: 'margin-top:12px' });
   const body = h('div', {});
   const element = h('div', {}, head, body);
 
-  const factor = () => portionFactor({
-    portion: state.portion,
-    customGrams: state.customGrams,
-    items: state.items,
-  });
-
-  const scaledItems = () => scaleItems(state.items, factor());
-  const scaledTotals = () => sumItems(scaledItems());
+  const totals = () => sumItems(state.items);
 
   /** Текущие значения карточки: и для строки итогов, и для того, кто её показывает. */
   function currentValues() {
-    const value = factor();
-    const totals = scaledTotals();
     return {
-      items: scaledItems(),
-      totals,
-      factor: value,
-      portion: state.portion,
-      portionNote: portionNote({ portion: state.portion, factor: value, grams: totals.grams }),
+      items: state.items.map((item) => ({ ...item })),
+      totals: totals(),
     };
   }
 
   function renderTotals() {
-    const totals = scaledTotals();
-    const value = factor();
+    const value = totals();
     if (onChange) onChange(currentValues());
     fill(totalsNode, 
       h('div', {},
-        h('b', { text: `${round(totals.kcal)} ккал` }),
-        ` · Б ${round(totals.protein)} · Ж ${round(totals.fat)} · У ${round(totals.carbs)}`),
+        h('b', { text: `${round(value.kcal)} ккал` }),
+        ` · Б ${round(value.protein)} · Ж ${round(value.fat)} · У ${round(value.carbs)}`),
       h('div', { class: 'small faint', style: 'margin-top:4px' },
-        `Вес порции ${round(totals.grams)} г`
-        + (value === 1 ? '' : ` (множитель ×${round(value, 2)})`)));
+        `Вес ${round(value.grams)} г`));
   }
 
   function itemRow(item, index) {
@@ -123,37 +107,11 @@ export function createResultCard({
   }
 
   function render() {
-    const portionRow = h('div', { class: 'portion-row' },
-      [...PORTION_PRESETS, { id: 'custom', label: 'Свои граммы' }].map((choice) => h('button', {
-        type: 'button',
-        text: choice.label,
-        'aria-pressed': String(state.portion === choice.id),
-        onclick: () => {
-          state.portion = choice.id;
-          render();
-        },
-      })));
-
-    const customInput = state.portion === 'custom'
-      ? h('label', { class: 'field', style: 'margin-top:10px' },
-        h('span', { class: 'field-label', text: 'Сколько съедено, граммов' }),
-        h('input', {
-          type: 'number', inputmode: 'decimal', value: state.customGrams ?? '',
-          oninput: (event) => {
-            state.customGrams = event.target.value;
-            renderTotals();
-          },
-        }))
-      : null;
-
     fill(body, 
       h('div', { class: 'small' },
         h('b', { text: analysis.dish }),
         h('div', { class: 'small faint', style: 'margin-top:2px' }, sourceLine(analysis, origin))),
-      h('h3', { class: 'card-title', style: 'margin-top:14px' }, 'Сколько съедено'),
-      portionRow,
-      customInput,
-      h('h3', { class: 'card-title', style: 'margin-top:16px' }, 'Позиции — можно править'),
+      h('h3', { class: 'card-title', style: 'margin-top:14px' }, 'Позиции — можно править'),
       h('div', {}, state.items.map((item, index) => itemRow(item, index))),
       totalsNode,
       analysis.assumptions

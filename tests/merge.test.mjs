@@ -41,12 +41,12 @@ test('название собирается из имён строк без по
   assert.equal(same.name, 'Курица, Хлеб', 'повтор не дублируется');
 });
 
-test('подписи и стоимость складываются, множитель порции сбрасывается', () => {
+test('подписи и стоимость складываются', () => {
   const merged = mergeEntries(rows);
   assert.equal(merged.comment, 'без соуса; ржаной');
   assert.ok(Math.abs(merged.cost - 0.0003) < 1e-9);
-  assert.equal(merged.portion, 'normal', 'у объединённой записи множитель не сохраняется');
-  assert.equal(merged.portionNote, '');
+  assert.equal(merged.portion, undefined, 'у записи нет размера порции');
+  assert.equal(merged.base, undefined, 'у записи нет базовых значений');
 });
 
 test('базис и уверенность берутся у первой строки, допущения соединяются', () => {

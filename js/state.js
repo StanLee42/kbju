@@ -113,10 +113,6 @@ export async function addEntry(data) {
     time: data.time || '12:00',
     name: String(data.name || '').trim() || 'Без названия',
     grams: data.grams === '' || data.grams === undefined || data.grams === null ? null : Number(data.grams),
-    portion: data.portion || 'normal',
-    // Базовые значения храним отдельно: множитель порции применяется к ним
-    // при каждом сохранении, поэтому правка ничего не умножает дважды.
-    base: data.base || null,
     kcal: Number(data.kcal) || 0,
     protein: Number(data.protein) || 0,
     fat: Number(data.fat) || 0,
@@ -129,7 +125,6 @@ export async function addEntry(data) {
     basis: data.basis || null,
     confidence: data.confidence || null,
     assumptions: data.assumptions || '',
-    portionNote: data.portionNote || '',
     cost: Number(data.cost) || 0,
     createdAt: Date.now(),
   };
