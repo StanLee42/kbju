@@ -1,4 +1,4 @@
-// Календарь: сетка месяца. Здесь только вычисления, никакого DOM — арифметика дат
+// Календарь: сетка месяца. Здесь только вычисления, никакого DOM: арифметика дат
 // ошибается тихо, поэтому её проверяют тестами.
 import { isoDate, parseISO } from './util.js';
 
@@ -32,14 +32,14 @@ export function monthTitle(iso) {
  * Сетка месяца: недели по семь дней, начиная с понедельника.
  *
  * Клетки соседних месяцев входят в сетку, чтобы недели не рвались: они помечены
- * inMonth: false, и показывать их бледнее — дело интерфейса.
+ * inMonth: false, и показывать их бледнее: дело интерфейса.
  */
 export function monthGrid(iso, { today = isoDate(new Date()) } = {}) {
   const start = parseISO(monthStart(iso));
   const year = start.getFullYear();
   const month = start.getMonth();
 
-  // Понедельник — первый день недели, а getDay() считает с воскресенья.
+  // Первым днём недели считаем понедельник, а getDay() считает с воскресенья.
   const leading = (start.getDay() + 6) % 7;
   const first = new Date(year, month, 1 - leading);
 

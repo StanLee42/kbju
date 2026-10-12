@@ -71,7 +71,7 @@ export async function createRecorder({ targetRate = SPEECH_SAMPLE_RATE } = {}) {
       source.disconnect();
       silence.disconnect();
     } catch {
-      // Узлы могли уже быть отключены — это не повод падать.
+      // Узлы могли уже быть отключены: это не повод падать.
     }
     for (const track of stream.getTracks()) track.stop();
     context.close().catch(() => {});

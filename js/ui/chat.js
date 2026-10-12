@@ -2,9 +2,9 @@
 // отвечает на уточняющие вопросы модели, а записать блюдо в дневник может в любой момент.
 //
 // Два правила, из которых следует всё остальное:
-// 1. Текущий разбор виден всегда — он показан отдельной полосой над полем ввода, а не только
+// 1. Текущий разбор виден всегда: он показан отдельной полосой над полем ввода, а не только
 //    последним сообщением: разговор можно листать, а числа остаются перед глазами.
-// 2. Запись в дневник — только по кнопке. Разговор сам ничего не сохраняет.
+// 2. Запись в дневник идёт только по кнопке. Разговор сам ничего не сохраняет.
 import { analyzeChat, createProvider, describeError } from '../llm/index.js';
 import { makeThumbnail } from '../media/image.js';
 import { addEntry, saveThumb, store } from '../state.js';
@@ -144,7 +144,7 @@ export function openChatSheet({ date = null } = {}) {
     // Разбора может ещё не быть: модель спросила, и считать пока нечего.
     if (!message.analysis.items?.length) return question;
 
-    // Полная карточка с правкой позиций — у последнего разбора: прежние уже не правят.
+    // Полная карточка с правкой позиций показывается у последнего разбора: прежние уже не правят.
     if (isLast) {
       return h('div', { class: 'msg msg-assistant' },
         question,
@@ -165,7 +165,7 @@ export function openChatSheet({ date = null } = {}) {
     return h('div', { class: 'msg msg-assistant' },
       question,
       h('div', { class: 'msg-text small faint' },
-        `${message.analysis.dish} — ${round(totals.grams)} г, ${round(totals.kcal)} ккал`));
+        `${message.analysis.dish}: ${round(totals.grams)} г, ${round(totals.kcal)} ккал`));
   }
 
   function renderThread() {
@@ -298,7 +298,7 @@ export function openChatSheet({ date = null } = {}) {
     // Пустой разбор не заменяет прежний: вопрос уточняет то, что уже посчитано.
     if (result.data.items?.length) state.draft = result.data;
     state.cost += cost;
-    // Модель спрашивает — показываем вопрос, а числа кладём на полосу: подробную карточку
+    // Модель спрашивает: показываем вопрос, а числа кладём на полосу. Подробную карточку
     // рядом с вопросом показывать было бы шумно. Если считать пока нечего, полоса молчит:
     // нули на ней выглядели бы как посчитанное блюдо.
     if (result.data.question && result.data.items?.length) {

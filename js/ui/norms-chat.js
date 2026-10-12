@@ -1,6 +1,6 @@
 // Разговор о нормах: калории и БЖУ для обычного и тренировочного дня.
 //
-// Зачем разговор, а не кнопка «загрузить отчёт»: нормы почти всегда обсуждают — с тренером,
+// Зачем разговор, а не кнопка «загрузить отчёт»: нормы почти всегда обсуждают, с тренером,
 // с врачом, с собственным опытом. Раньше можно было только загрузить отчёт и согласиться
 // с числами; поспорить было негде.
 //
@@ -22,7 +22,7 @@ function planLine(title, day) {
   if (!day) return null;
   return h('div', { class: 'small' },
     h('b', { text: title }),
-    ` — ${round(day.kcal)} ккал · Б ${round(day.protein)} · Ж ${round(day.fat)} · У ${round(day.carbs)}`);
+    `: ${round(day.kcal)} ккал · Б ${round(day.protein)} · Ж ${round(day.fat)} · У ${round(day.carbs)}`);
 }
 
 export function openNormsChat({ onApplied = null } = {}) {
@@ -52,7 +52,7 @@ export function openNormsChat({ onApplied = null } = {}) {
       : null,
     note: 'Числа считает приложение по рычагам: темп снижения, активность, белок на килограмм '
       + 'тощей массы, добавка на тренировку. Модель их меняет по вашим словам и объясняет, '
-      + 'а расчёт по шагам видно в разговоре — так понятно, что именно сдвинулось.',
+      + 'а расчёт по шагам видно в разговоре: так понятно, что именно сдвинулось.',
     onSend: async ({ text, photo }) => {
       const before = history();
       state.messages.push({
@@ -73,7 +73,7 @@ export function openNormsChat({ onApplied = null } = {}) {
     if (!state.measurement) {
       state.plan = null;
       state.planError = 'Измерений нет: пришлите отчёт биоимпеданса снимком или назовите вес, '
-        + 'рост, возраст и пол — без них считать не из чего.';
+        + 'рост, возраст и пол: без них считать не из чего.';
       return;
     }
     const { pace, ...defaults } = state.params;
@@ -294,7 +294,7 @@ export function openNormsChat({ onApplied = null } = {}) {
     await saveSettings({ dayTypes: types });
 
     // Показываем, что именно записали: числа могли совпасть с прежними, и тогда
-    // «ничего не изменилось» — это не ошибка, а отсутствие разницы.
+    // «ничего не изменилось»: это не ошибка, а отсутствие разницы.
     const applied = types
       .filter((type) => DAY_TYPE_SOURCE[type.id])
       .map((type) => `${type.name}: ${round(type.kcal)} ккал · Б ${round(type.protein)} `
@@ -303,7 +303,7 @@ export function openNormsChat({ onApplied = null } = {}) {
     state.messages.push({
       role: 'assistant',
       answer: { comment: `Записал в дни: ${applied}. Если день сегодня другой по расписанию, `
-        + 'на экране дня видна его норма — откройте нужный день или тип в настройках.' },
+        + 'на экране дня видна его норма: откройте нужный день или тип в настройках.' },
     });
     render();
     toast('Нормы обновлены');
