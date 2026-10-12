@@ -1,6 +1,7 @@
 // Шторка добавления и правки записи. Числа вводятся как есть: множителя размера порции нет,
 // поэтому в записи лежат те же числа, что человек набрал.
 import { addEntry, deleteEntry, store, updateEntry } from '../state.js';
+import { forWeight } from '../products.js';
 import { h, nowTime, num, round } from '../util.js';
 import { openSheet, toast } from './components/sheet.js';
 
@@ -57,6 +58,26 @@ export function openAddSheet({ entry = null, date = null } = {}) {
   [kcalInput, proteinInput, fatInput, carbsInput].forEach((input) => {
     input.addEventListener('input', updatePreview);
   });
+
+  // Запись из сохранённого продукта: числа считаются по весу и снимку значений на 100 г.
+  // Снимок лежит в самой записи, поэтому правка продукта прошлые дни не меняет, а правка
+  // веса пересчитывает числа заново.
+  const fromProduct = Boolean(entry?.per100);
+  const valueInputs = [[kcalInput, 'kcal'], [proteinInput, 'protein'],
+    [fatInput, 'fat'], [carbsInput, 'carbs']];
+
+  if (fromProduct) {
+    gramsInput.addEventListener('input', () => {
+      const value = forWeight(entry.per100, num(gramsInput.value));
+      for (const [input, key] of valueInputs) input.value = round(value[key], 1);
+      updatePreview();
+    });
+  }
+
+  const productNote = fromProduct
+    ? h('div', { class: 'tiny faint', style: 'margin-top:6px' },
+      'Числа считаются по весу и значениям продукта на 100 г')
+    : null;
 
   const dateRow = h('div', { class: 'tiny faint', style: 'margin-bottom:12px' },
     `${targetDate}${isEdit ? ' · запись существующая' : ''}`);
@@ -115,6 +136,7 @@ export function openAddSheet({ entry = null, date = null } = {}) {
     h('div', { class: 'grid-2' },
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Время' }), timeInput),
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Вес, г' }), gramsInput)),
+    productNote,
     h('div', { class: 'grid-4' },
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Ккал' }), kcalInput),
       h('label', { class: 'field' }, h('span', { class: 'field-label', text: 'Б' }), proteinInput),

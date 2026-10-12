@@ -4,6 +4,7 @@
 // Живёт отдельно, потому что иначе правки в ней пришлось бы повторять в двух местах,
 // а расхождение между разговором и снимком в дневнике выглядело бы как ошибка.
 import { sumItems } from '../portion.js';
+import { per100g, saveProduct } from '../products.js';
 import { fill, h, num, round } from '../util.js';
 import { addEntry, deleteEntry, loadThumb } from '../state.js';
 import { splitEntry } from '../merge.js';
@@ -117,7 +118,7 @@ export function createResultCard({
       analysis.assumptions
         ? h('p', { class: 'small faint', style: 'margin-top:10px' }, `Что учтено: ${analysis.assumptions}`)
         : null,
-      onSave || onRetry
+      onSave || onRetry || state.items.length
         ? h('div', { class: 'chips', style: 'margin-top:16px' },
           // Кнопка сохранения показывается только тем, кто её просил: в разговоре
           // сохраняет полоса с черновиком, и второй кнопки быть не должно.
@@ -130,6 +131,22 @@ export function createResultCard({
                   return;
                 }
                 onSave(currentValues());
+              },
+            })
+            : null,
+          // Список продуктов пополняется из готового разбора: числа пересчитываются
+          // на 100 г, чтобы продукт был сопоставим с остальными.
+          state.items.length
+            ? h('button', {
+              class: 'btn btn-small', type: 'button', text: 'В мои продукты',
+              onclick: async () => {
+                try {
+                  await saveProduct({ name: analysis.dish, per100: per100g(state.items) });
+                } catch (error) {
+                  toast(error.message);
+                  return;
+                }
+                toast(`«${analysis.dish}» в моих продуктах`);
               },
             })
             : null,

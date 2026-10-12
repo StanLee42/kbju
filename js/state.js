@@ -2,6 +2,7 @@
 // Простейший стор с подписками — экранов мало, полный перерисовки достаточно.
 import * as db from './db.js';
 import { DEFAULT_SETTINGS, dayTypeById, resolveDayTypeId, scheduledDayTypeId, sumEntries } from './norm.js';
+import { entryFromProduct } from './products.js';
 import { todayISO, uid } from './util.js';
 
 const listeners = new Set();
@@ -126,6 +127,9 @@ export async function addEntry(data) {
     confidence: data.confidence || null,
     assumptions: data.assumptions || '',
     cost: Number(data.cost) || 0,
+    // Поля записи из сохранённого продукта: откуда пришла и по каким числам считалась.
+    productId: data.productId || null,
+    per100: data.per100 || null,
     createdAt: Date.now(),
   };
   await db.put('entries', entry);
@@ -134,6 +138,14 @@ export async function addEntry(data) {
   }
   emit();
   return entry;
+}
+
+/**
+ * Запись в дневник из сохранённого продукта: числа считаются по весу порции.
+ * Модель не вызывается, поэтому запись не стоит токенов и по строке в расход не попадает.
+ */
+export async function addEntryFromProduct({ product, grams, date, time }) {
+  return addEntry(entryFromProduct({ product, grams, date, time }));
 }
 
 export async function updateEntry(entry) {
