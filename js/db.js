@@ -1,10 +1,10 @@
 // Обёртка над IndexedDB. Хранилища объявлены все сразу, включая те, что
 // понадобятся на следующих этапах: так не придётся делать миграции.
 const DB_NAME = 'kbju';
-// Версия 3: добавлена вода. Хранилища только добавляются, существующие данные
-// при обновлении не трогаются.
-const DB_VERSION = 3;
-const STORES = ['entries', 'settings', 'dishes', 'measurements', 'usage', 'thumbs', 'water'];
+// Версия 4: добавлены сохранённые продукты. Хранилища только добавляются,
+// существующие данные при обновлении не трогаются.
+const DB_VERSION = 4;
+const STORES = ['entries', 'settings', 'dishes', 'measurements', 'usage', 'thumbs', 'water', 'products'];
 
 let dbPromise = null;
 

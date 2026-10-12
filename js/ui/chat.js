@@ -13,6 +13,7 @@ import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, nowTime, round } from '../util.js';
 import { clearChat, loadChat, loadTyped, saveChat, saveTyped } from '../chat-session.js';
 import { createComposer } from './components/composer.js';
+import { openProductsSheet } from './products.js';
 import { openSheet, toast } from './components/sheet.js';
 import { createResultCard } from './result-card.js';
 
@@ -44,14 +45,50 @@ export function openChatSheet({ date = null } = {}) {
   const thread = h('div', { class: 'thread' });
   const draftBar = h('div', { class: 'draft-bar', hidden: true });
   const host = h('div', {}, thread, draftBar);
-  const sheet = openSheet({
-    title: 'Добавить еду',
-    content: host,
-    // Закрытие окна заканчивает разговор, каким бы способом его ни закрыли: кнопкой «В дневник»,
-    // касанием мимо окна, клавишей Escape, системной кнопкой «назад» или переходом в другое окно.
-    // Следующее открытие окна начинается с чистого листа.
-    onClose: () => clearChat(),
-  });
+  let sheet = null;
+
+  /**
+   * Окно разговора. Показывается заново после того, как его вытеснил список продуктов:
+   * такое закрытие заканчивает разговор, и если человек возвращается к тому же разбору,
+   * разговор ложится в хранилище заново.
+   */
+  function showChat() {
+    sheet = openSheet({
+      title: 'Добавить еду',
+      content: host,
+      actions: [h('button', {
+        class: 'btn btn-small', type: 'button', text: 'Из моих продуктов',
+        onclick: () => openProductsSheet({
+          date: targetDate,
+          // Добавить продукт к разбору можно, когда разбор есть: без него добавлять
+          // не к чему, и остаётся запись в дневник по весу.
+          onPick: state.current?.items?.length || state.draft?.items?.length
+            ? addItemToDraft : null,
+        }),
+      })],
+      // Закрытие окна заканчивает разговор, каким бы способом его ни закрыли: кнопкой «В дневник»,
+      // касанием мимо окна, клавишей Escape, системной кнопкой «назад» или переходом в другое окно.
+      // Следующее открытие окна начинается с чистого листа.
+      onClose: () => clearChat(),
+    });
+    return sheet;
+  }
+
+  /** Продукт из списка становится ещё одной позицией разбора. */
+  function addItemToDraft(item) {
+    const items = [...(state.current?.items || state.draft?.items || []), item];
+    state.current = { items, totals: sumItems(items) };
+    state.draft = state.draft ? { ...state.draft, items } : state.draft;
+    // Карточка в переписке строится по разбору последнего сообщения: правим и её,
+    // иначе на экране оказались бы две разные версии одного разбора.
+    const last = [...state.messages].reverse().find((message) => message.analysis);
+    if (last) last.analysis = { ...last.analysis, items };
+    toast(`${item.name}: добавлено к разбору`);
+    // Переход в список закрыл окно и закончил разговор. Здесь окно открывается заново, и уже
+    // по открытому окну разговор ложится в хранилище: человек возвращается к тому же разбору.
+    showChat();
+    render();
+  }
 
   const input = createComposer({
     placeholder: 'Что вы съели',
@@ -317,6 +354,9 @@ export function openChatSheet({ date = null } = {}) {
     sheet.close();
   }
 
+  // Порядок важен: окно открывается первым, иначе первый же подсчёт значений не найдёт окна
+  // и разговор не сохранится.
+  showChat();
   render();
   return sheet;
 }
