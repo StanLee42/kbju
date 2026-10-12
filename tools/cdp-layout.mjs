@@ -1,5 +1,5 @@
 // Проверка вёрстки на узких экранах: страница не должна быть шире телефона,
-// нижнее меню должно помещаться целиком, а настройки — открываться.
+// нижнее меню должно помещаться целиком, а настройки открываться.
 //
 // Запуск (нужен Chrome с отладочным портом и локальный сервер):
 //   node tools/cdp-layout.mjs
@@ -73,7 +73,7 @@ const loadedStyles = await evaluate(`(() => {
   const sheet = [...document.styleSheets].find((s) => (s.href || '').includes('styles.css'));
   if (!sheet) return 'файл стилей не найден';
   try {
-    // Признак свежих стилей — правило панели вкладок: оно держит вкладки в один ряд
+    // Признак свежих стилей это правило панели вкладок: оно держит вкладки в один ряд
     // и живёт в стилях постоянно. Раньше здесь было правило из блока колец, но кольца
     // с экрана убрали вместе с блоком.
     const rules = [...sheet.cssRules].map((rule) => rule.cssText).join('\\n');
@@ -140,7 +140,7 @@ for (const width of WIDTHS) {
         offenders: offenders.slice(0, 4),
         tabs,
         screenErrors: Boolean(document.getElementById('view')?.dataset.errorShown),
-        // Служебные слова в тексте — след пустых значений, которые браузер
+        // Служебные слова в тексте это след пустых значений, которые браузер
         // превратил в текстовые узлы. Такое видно глазами, но легко пропустить.
         strayText: ['null', 'undefined', 'NaN']
           .filter((word) => new RegExp('(^|\\\\s)' + word + '($|\\\\s)').test(document.body.innerText))
@@ -155,7 +155,7 @@ for (const width of WIDTHS) {
     // добавления выше остальных, но стоять должна там же.
     const middles = (data.tabs || []).map((tab) => tab.middle);
     if (middles.length && Math.max(...middles) - Math.min(...middles) > 2) {
-      problems.push(`${line}: вкладки разъехались по высоте — часть нижней панели не видна`);
+      problems.push(`${line}: вкладки разъехались по высоте: часть нижней панели не видна`);
     }
 
     if (data.layoutWidth > width + 1) {
@@ -170,7 +170,7 @@ for (const width of WIDTHS) {
     }
     if (data.screenErrors) problems.push(`${line}: на экране показана ошибка`);
     if (data.strayText) {
-      problems.push(`${line}: на экран попали служебные слова — ${data.strayText}`);
+      problems.push(`${line}: на экран попали служебные слова: ${data.strayText}`);
     }
 
     console.log(`${line}: вёрстка ${data.layoutWidth}px, экран ${width}px, перелив ${data.overflow}px, `

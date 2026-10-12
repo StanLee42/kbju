@@ -36,14 +36,14 @@ export function mount(container) {
   container.append(
     h('header', { class: 'dayhead' }, title, subtitle, dayRow, dayChoice, source),
     // Круговых диаграмм здесь больше нет: они повторяли полоски и путали числами.
-    // Полоски ниже показывают норму, съеденное, остаток и перебор — этого достаточно.
+    // Полоски ниже показывают норму, съеденное, остаток и перебор: этого достаточно.
     barsCard,
     feedCard,
   );
 
   /**
    * Тип дня показываем одной плашкой: раньше рядом висели оба типа, и было непонятно,
-   * какой из них текущий. Смена типа — по нажатию на плашку.
+   * какой из них текущий. Тип дня меняется нажатием на плашку.
    */
   function renderDayType() {
     const { settings, date } = store;
@@ -84,7 +84,7 @@ export function mount(container) {
     selection.ids.clear();
   }
 
-  /** Объединяет отмеченные записи в одну: суммы складываются, время — от самой ранней. */
+  /** Объединяет отмеченные записи в одну: суммы складываются, время берётся от самой ранней. */
   async function mergeSelected() {
     const entries = byTimeAscending(store.entries);
     const chosen = entries.filter((entry) => selection.ids.has(entry.id));

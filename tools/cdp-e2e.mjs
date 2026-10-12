@@ -15,7 +15,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const url = process.argv[2] || 'http://127.0.0.1:8765/#/settings';
 const debugPort = process.env.CDP_PORT || 9222;
 // Полная страница отчёта: приложение само срежет шапку с именем, поэтому
-// подавать уже обрезанный снимок нельзя — обрежется дважды.
+// подавать уже обрезанный снимок нельзя: обрежется дважды.
 const reportPath = process.argv[3] || '/tmp/report-page1.png';
 
 const envText = await readFile(join(root, '.env.local'), 'utf8');

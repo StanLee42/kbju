@@ -99,21 +99,21 @@ try {
   await wait(3000);
 
   const first = await state();
-  console.log(`первая загрузка: служба управляет — ${first.управляет}, кэши: ${first.кэши}`);
-  if (!first.управляет) problems.push('service worker не взял управление — обновление проверять нечем');
+  console.log(`первая загрузка: служба управляет: ${first.управляет}, кэши: ${first.кэши}`);
+  if (!first.управляет) problems.push('service worker не взял управление: обновление проверять нечем');
   const firstVersion = versionOf(original);
   const firstCache = String(first.кэши).split(', ').find((name) => name.startsWith('kbju-')) || '';
   if (firstCache !== firstVersion) {
     problems.push(`страница работает не на той сборке, что в sw.js: кэш ${firstCache}, версия ${firstVersion}`);
   }
 
-  // Подменяем сборку на месте: так же меняется sw.js при публикации (имя кэша — отпечаток).
+  // Подменяем сборку на месте: так же меняется sw.js при публикации (имя кэша это отпечаток).
   const nextVersion = 'kbju-update-check';
   await writeFile(swPath, original.replace(/const VERSION = '[^']*'/, `const VERSION = '${nextVersion}'`), 'utf8');
   console.log(`подменили сборку: ${firstVersion} → ${nextVersion}`);
 
   // Случай, который и случился у владельца: приложение не перезапускают, а возвращаются
-  // к нему — Android держит его в памяти, и загрузки страницы не происходит вовсе.
+  // к нему: Android держит его в памяти, и загрузки страницы не происходит вовсе.
   // Проверяем, что и тогда сборка подхватывается сама.
   loadEvents = 0;
   await evaluate(`(async () => {
@@ -125,7 +125,7 @@ try {
   await wait(9000);
 
   const after = await state();
-  console.log(`после подмены: загрузок страницы — ${loadEvents}, служба управляет — ${after.управляет}`);
+  console.log(`после подмены: загрузок страницы ${loadEvents}, служба управляет: ${after.управляет}`);
   console.log(`кэши: ${after.кэши}`);
 
   // При возврате к приложению страница не загружается заново, поэтому ждём одну

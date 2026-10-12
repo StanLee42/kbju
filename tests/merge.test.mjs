@@ -56,7 +56,7 @@ test('базис и уверенность берутся у первой стр
   ]);
   assert.equal(merged.basis, 'per_100g', 'базис берётся у самой ранней строки');
   assert.equal(merged.confidence, 'low');
-  assert.equal(merged.assumptions, 'Соус не учтён. Вес оценён.', 'порядок — по времени еды');
+  assert.equal(merged.assumptions, 'Соус не учтён. Вес оценён.', 'порядок по времени еды');
 });
 
 test('пустое и одна строка не ломают объединение', () => {
@@ -87,7 +87,7 @@ test('объединённую запись можно разобрать на �
   assert.equal(parts[0].source, 'split');
   assert.equal(parts[0].grams, 200);
 
-  // Сумма составляющих равна исходной записи — иначе разбор терял бы еду.
+  // Сумма составляющих равна исходной записи: иначе разбор терял бы еду.
   const back = parts.reduce((acc, part) => acc + part.kcal, 0);
   assert.equal(Math.round(back), Math.round(merged.kcal));
 });

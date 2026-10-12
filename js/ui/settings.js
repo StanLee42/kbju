@@ -84,17 +84,17 @@ export function mount(container) {
   /**
    * Показывает, какая сборка работает сейчас и какая лежит на сервере.
    *
-   * Работающую сборку берём из самого кода: служба может быть уже новой, а страница —
+   * Работающую сборку берём из самого кода: служба может быть уже новой, а страница
    * прежней, и тогда верить ей нельзя. На этом владелец дважды попал: строка показывала
    * новую версию, а кнопки и функции были из старой.
    */
   function buildVersionLine() {
     const line = h('p', { class: 'tiny faint center' }, `работает сборка: ${BUILD_VERSION}`);
     const hint = h('p', { class: 'tiny faint center', style: 'margin-top:6px' },
-      'Когда приходит новая сборка, приложение перезагружается само — и при запуске, '
+      'Когда приходит новая сборка, приложение перезагружается само, и при запуске, '
       + 'и когда вы возвращаетесь к нему. Кнопка нужна, если этого не случилось.');
 
-    // Своей кнопки обновления у установленного приложения нет — браузер её не показывает.
+    // Своей кнопки обновления у установленного приложения нет: браузер её не показывает.
     const refresh = h('button', {
       class: 'btn btn-small', type: 'button', text: 'Обновить приложение',
       onclick: async () => {
@@ -109,7 +109,7 @@ export function mount(container) {
       if (!server || server === BUILD_VERSION) return;
       line.textContent = `работает сборка: ${BUILD_VERSION} · на сервере новее: ${server}`;
       line.style.color = 'var(--over)';
-      hint.textContent = 'На сервере лежит другая сборка. Нажмите «Обновить приложение» — '
+      hint.textContent = 'На сервере лежит другая сборка. Нажмите «Обновить приложение»: '
         + 'новая подхватится сразу; если не помогло, нажмите ещё раз.';
     });
 
@@ -197,7 +197,7 @@ export function mount(container) {
 
     nodes.push(h('p', { class: 'tiny faint', style: 'margin-top:10px' },
       'Ключ хранится только на устройстве: он не попадает ни в выгрузку дневника, '
-      + 'ни в публикацию приложения. Проверка ключа бесплатна — она спрашивает только баланс.'));
+      + 'ни в публикацию приложения. Проверка ключа бесплатна: она спрашивает только баланс.'));
 
     fill(providerHost, ...nodes);
   }
@@ -230,7 +230,7 @@ export function mount(container) {
     fill(reportHost,
       h('p', { class: 'small muted' },
         'Нормы калорий и БЖУ обсуждаются разговором: пришлите снимок отчёта биоимпеданса '
-        + 'или просто напишите словами — «тренер считает, что завышено», «хочу минус триста». '
+        + 'или просто напишите словами: «тренер считает, что завышено», «хочу минус триста». '
         + 'Числа считает приложение и показывает расчёт по шагам, чтобы видеть, что именно '
         + 'сдвинулось, а решение остаётся за вами.'),
       h('div', { class: 'chips', style: 'margin-top:12px' },
@@ -239,7 +239,7 @@ export function mount(container) {
           onclick: () => openNormsChat(),
         })),
       h('p', { class: 'tiny faint', style: 'margin-top:10px' },
-        'Править нормы руками тоже можно — в разделе «Типы дней и нормы». Если менять калории '
+        'Править нормы руками тоже можно, в разделе «Типы дней и нормы». Если менять калории '
         + 'дня, белки, жиры и углеводы пересчитаются в той же пропорции.'));
   }
 
@@ -279,7 +279,7 @@ export function mount(container) {
             onchange: (event) => saveSettings({ prices: { ...prices, ...DEFAULT_PRICES, asOf: event.target.value } }),
           }))),
       h('p', { class: 'tiny faint', style: 'margin-top:10px' },
-        'Цены за миллион токенов. Все суммы в приложении — оценка: тарифы у провайдера меняются, '
+        'Цены за миллион токенов. Все суммы в приложении это оценка: тарифы у провайдера меняются, '
         + 'поэтому таблица редактируется и подписана датой.'),
       h('div', { class: 'chips', style: 'margin-top:8px' },
         h('button', {
@@ -431,7 +431,7 @@ export function mount(container) {
           class: 'row-between', style: 'padding:7px 0;border-bottom:1px solid var(--line)',
         },
         h('span', { class: 'small' },
-          `${date} — ${store.settings.dayTypes.find((type) => type.id === overrides[date])?.name || overrides[date]}`),
+          `${date}: ${store.settings.dayTypes.find((type) => type.id === overrides[date])?.name || overrides[date]}`),
         h('button', {
           class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать',
           onclick: () => {
@@ -479,13 +479,13 @@ export function mount(container) {
         })))),
     h('div', { class: 'tiny faint', style: 'margin-top:6px' },
       `белки, жиры и углеводы дают ${round(kcalFromMacros(type))} ккал`
-      + (Math.abs(kcalFromMacros(type) - num(type.kcal)) < 1 ? ' — сходится с планом' : '')),
+      + (Math.abs(kcalFromMacros(type) - num(type.kcal)) < 1 ? ': сходится с планом' : '')),
     )));
   }
 
   /**
-   * Правка дня целиком: меняете калории — БЖУ пересчитываются в той же пропорции,
-   * меняете макрос — калории пересчитываются по нему. Так план дня остаётся согласованным.
+   * Правка дня целиком: меняете калории, БЖУ пересчитываются в той же пропорции,
+   * меняете макрос: калории пересчитываются по нему. Так план дня остаётся согласованным.
    */
   function patchDayTypeLinked(index, key, rawValue) {
     const type = store.settings.dayTypes[index];
@@ -614,7 +614,7 @@ export function mount(container) {
           class: 'row-between', style: 'padding:7px 0;border-bottom:1px solid var(--line)',
         },
         h('span', { class: 'small' },
-          `${date} — ${store.settings.dayTypes.find((type) => type.id === overrides[date])?.name || overrides[date]}`),
+          `${date}: ${store.settings.dayTypes.find((type) => type.id === overrides[date])?.name || overrides[date]}`),
         h('button', {
           class: 'btn btn-small btn-ghost', type: 'button', text: 'Убрать',
           onclick: () => {
@@ -654,7 +654,7 @@ export function mount(container) {
 
     parts.push(h('div', { style: 'margin-top:6px' },
       persistent === true
-        ? 'Постоянное хранилище включено — браузер не удалит дневник сам.'
+        ? 'Постоянное хранилище включено: браузер не удалит дневник сам.'
         : persistent === false
           ? 'Постоянное хранилище не выдано: браузер может удалить данные при нехватке места.'
           : 'Статус постоянного хранилища неизвестен.'));

@@ -1,4 +1,4 @@
-// Карточка разбора: разговор про еду и разбор снимка приводят к одному и тому же —
+// Карточка разбора: разговор про еду и разбор снимка приводят к одному и тому же:
 // название блюда, позиции с числами, итог и сохранение в дневник.
 //
 // Живёт отдельно, потому что иначе правки в ней пришлось бы повторять в двух местах,
@@ -32,7 +32,7 @@ function sourceLine(analysis, origin) {
  * @param {object} options.analysis разобранный ответ модели
  * @param {Array} options.items позиции (карточка их меняет)
  * @param {Node|null} options.head верхний блок: снимок у фото, расшифровка у голоса
- * @param {string} options.origin 'photo' | 'chat' — как подписывать источник чисел
+ * @param {string} options.origin 'photo' | 'chat', как подписывать источник чисел
  * @param {string} options.retryLabel как называется кнопка возврата к вводу
  * @param {Function} options.onRetry
  * @param {Function|null} options.onSave получает готовые к записи позиции и итог;
@@ -112,7 +112,7 @@ export function createResultCard({
       h('div', { class: 'small' },
         h('b', { text: analysis.dish }),
         h('div', { class: 'small faint', style: 'margin-top:2px' }, sourceLine(analysis, origin))),
-      h('h3', { class: 'card-title', style: 'margin-top:14px' }, 'Позиции — можно править'),
+      h('h3', { class: 'card-title', style: 'margin-top:14px' }, 'Позиции можно править'),
       h('div', {}, state.items.map((item, index) => itemRow(item, index))),
       totalsNode,
       analysis.assumptions
@@ -185,7 +185,7 @@ export async function openEntryDetails(entry) {
       ? h('div', {}, items.map((item) => h('div', {
         style: 'padding:8px 0;border-bottom:1px solid var(--line)',
       },
-      h('div', { class: 'small' }, `${item.name} — ${round(item.grams)} г`),
+      h('div', { class: 'small' }, `${item.name}: ${round(item.grams)} г`),
       h('div', { class: 'tiny faint' },
         `${round(item.kcal)} ккал · Б ${round(item.protein)} · Ж ${round(item.fat)} · У ${round(item.carbs)}`))))
       : h('p', { class: 'small muted' }, 'Позиции не сохранились, есть только итог.'),

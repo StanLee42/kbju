@@ -274,7 +274,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .field-compact input { padding: 8px 8px; font-size: 15px; }
 .field-compact .field-label { font-size: 11px; margin-bottom: 3px; }
 
-/* Варианты типа дня — такие же плашки, как сама кнопка: раньше они выглядели чужими. */
+/* Варианты типа дня это такие же плашки, как сама кнопка: раньше они выглядели чужими. */
 .badge[aria-pressed="true"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 20%, var(--bg-elev-2));
@@ -299,7 +299,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* ---------- Плашка дня и календарь ---------- */
 
-/* Тип дня показываем одной плашкой: рядом два типа путали — непонятно, какой текущий. */
+/* Тип дня показываем одной плашкой: рядом два типа путали, и непонятно, какой текущий. */
 .day-badge-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .badge {
@@ -430,7 +430,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   display: grid;
   /* Колонки не задаём числом: панель сама раскладывает вкладки в один ряд, сколько бы их
      ни было. Раньше тут стояло repeat(4, 1fr), и пятая вкладка уезжала на вторую строку
-     за нижний край экрана — на неё нельзя было нажать. */
+     за нижний край экрана, и на неё нельзя было нажать. */
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
   align-items: center;

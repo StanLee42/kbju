@@ -147,7 +147,7 @@ export function mount(container) {
     });
 
     const warn = {
-      over: 'Бюджет исчерпан — можно перевести разговор в локальный режим без модели.',
+      over: 'Бюджет исчерпан: можно перевести разговор в локальный режим без модели.',
       critical: 'Израсходовано больше 80% бюджета.',
       warn: 'Израсходована половина бюджета.',
       ok: '',
@@ -202,7 +202,7 @@ export function mount(container) {
 
     const parts = [h('h2', { class: 'card-title', text: 'Счёт у провайдера' })];
     if (!provider.key) {
-      parts.push(h('p', { class: 'small muted' }, 'Ключ не задан — баланс не спросить.'));
+      parts.push(h('p', { class: 'small muted' }, 'Ключ не задан: баланс не спросить.'));
     } else if (balance) {
       parts.push(h('div', { style: 'font-size:22px;font-weight:650' },
         `${balance.total.toFixed(2)} ${balance.currency}`));
@@ -216,11 +216,11 @@ export function mount(container) {
       if (balanceError.hint) parts.push(h('p', { class: 'tiny faint' }, balanceError.hint));
     } else {
       parts.push(h('p', { class: 'small muted' },
-        'Пока не спрашивали. Кнопка сделает запрос к провайдеру — он бесплатный.'));
+        'Пока не спрашивали. Кнопка сделает запрос к провайдеру: он бесплатный.'));
     }
     parts.push(h('div', { class: 'chips', style: 'margin-top:10px' }, button));
     parts.push(h('p', { class: 'tiny faint', style: 'margin-top:10px' },
-      'Распознавание речи работает на устройстве и ничего не стоит — деньги тратят только '
+      'Распознавание речи работает на устройстве и ничего не стоит, деньги тратят только '
       + 'запросы к модели.'));
     fill(balanceCard, ...parts);
   }
@@ -230,7 +230,7 @@ export function mount(container) {
     const table = prices.perModel?.[store.settings?.provider?.model] || prices.perModel?.['deepseek-flash'];
     pricesNote.textContent = table
       ? `Цены на ${prices.asOf}: вход ${table.inputCacheMiss} / из кэша ${table.inputCacheHit} / выход `
-        + `${table.output} за миллион токенов. Суммы — оценка, а не факт: тарифы меняются.`
+        + `${table.output} за миллион токенов. Суммы это оценка, а не факт: тарифы меняются.`
       : '';
   }
 

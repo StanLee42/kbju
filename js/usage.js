@@ -80,7 +80,7 @@ export function computeCost({ usage, model = 'deepseek-flash', at = new Date(), 
     + searches * (price.perSearch || 0);
 
   return {
-    // Стоимость считаем точно: округление живёт на границах — при записи в журнал
+    // Стоимость считаем точно: округление живёт на границах, при записи в журнал
     // и при показе, иначе арифметика перестаёт сходиться.
     cost,
     currency: prices.currency || 'USD',

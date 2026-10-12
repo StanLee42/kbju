@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS = {
     week: { mon: 'rest', tue: 'rest', wed: 'train', thu: 'rest', fri: 'train', sat: 'rest', sun: 'rest' },
     cycle: { length: 4, trainPositions: [1, 3], startDate: isoDate(new Date()) },
   },
-  // Исключения на конкретные даты и ручные переключения — один и тот же механизм.
+  // Исключения на конкретные даты и ручные переключения: один и тот же механизм.
   dateOverrides: {},
 };
 
@@ -87,7 +87,7 @@ export function kcalFromMacros({ protein = 0, fat = 0, carbs = 0 } = {}) {
  * Пересчитывает БЖУ под заданные калории, сохраняя их соотношение.
  *
  * Нужно, когда человек меняет калории дня руками: раньше числа БЖУ оставались прежними,
- * и день начинал врать — калории одни, а макросы от другого плана. Держим форму дня:
+ * и день начинал врать: калории одни, а макросы от другого плана. Держим форму дня:
  * умножаем белки, жиры и углеводы на одно и то же число.
  */
 export function macrosForKcal(macros = {}, targetKcal) {
@@ -146,7 +146,7 @@ export function describeSchedule(settings, dateISO = todayISO()) {
 // ---------------------------------------------------------------------------
 
 export const NORM_DEFAULTS = {
-  proteinPerKgLean: 1.9, // середина диапазона 1,6–2,2 г на кг тощей массы
+  proteinPerKgLean: 1.9, // середина диапазона 1,6-2,2 г на кг тощей массы
   fatPerKgMin: 0.8,
   fatPerKgTraining: 0.9,
   kcalPerKgFat: 7700, // калорий в килограмме жировой ткани
@@ -155,7 +155,7 @@ export const NORM_DEFAULTS = {
   deficitShareTraining: 0.7, // в тренировочный день дефицит меньше
 };
 
-/** Основной обмен по формуле Миффлина — запасной путь, когда измерения нет. */
+/** Основной обмен по формуле Миффлина: запасной путь, когда измерения нет. */
 export function mifflinStJeor({ sex, weight, height, age }) {
   if (!weight || !height || !age) return null;
   const base = 10 * weight + 6.25 * height - 5 * age;
@@ -206,7 +206,7 @@ export function normsFromMeasurement({
   let lean = leanMass;
   if (!lean) {
     lean = round(weight * 0.75, 1);
-    assumptions.push('Тощая масса неизвестна, принята как 75% от массы тела — это грубая оценка.');
+    assumptions.push('Тощая масса неизвестна, принята как 75% от массы тела: это грубая оценка.');
   }
 
   const tdeeRest = bmr * defaults.activityRest;
@@ -214,7 +214,7 @@ export function normsFromMeasurement({
   steps.push(`Расход обычного дня ${round(tdeeRest)} ккал: ${round(bmr)} × ${defaults.activityRest}.`);
   assumptions.push(`Коэффициент активности ${defaults.activityRest} принят для лёгкой активности.`);
   steps.push(`Расход тренировочного дня ${round(tdeeTraining)} ккал: плюс ${defaults.trainingExtraKcal} ккал на тренировку.`);
-  assumptions.push(`Расход тренировки принят ${defaults.trainingExtraKcal} ккал — час силовой работы с разминкой.`);
+  assumptions.push(`Расход тренировки принят ${defaults.trainingExtraKcal} ккал: час силовой работы с разминкой.`);
 
   const weeklyDeficit = pace * defaults.kcalPerKgFat;
   const share = restDays + defaults.deficitShareTraining * trainingDays;
@@ -228,7 +228,7 @@ export function normsFromMeasurement({
 
   const fatRest = round(defaults.fatPerKgMin * weight);
   const fatTraining = round(defaults.fatPerKgTraining * weight);
-  steps.push(`Жир ${fatRest} г в обычный день и ${fatTraining} г в тренировочный — от массы тела ${weight} кг.`);
+  steps.push(`Жир ${fatRest} г в обычный день и ${fatTraining} г в тренировочный: от массы тела ${weight} кг.`);
 
   const kcalRest = round(tdeeRest - deficitRest);
   const kcalTraining = round(tdeeTraining - deficitTraining);

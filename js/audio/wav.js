@@ -26,7 +26,7 @@ export function downmixToMono(channels) {
  * Передискретизация.
  *
  * При понижении частоты усредняем по окну источника: просто выбрасывать лишние сэмплы
- * нельзя — на речи это даёт искажения. При повышении раскладываем линейно.
+ * нельзя: на речи это даёт искажения. При повышении раскладываем линейно.
  */
 export function resampleLinear(samples, fromRate, toRate = SPEECH_SAMPLE_RATE) {
   if (!samples?.length || fromRate === toRate) return samples || new Float32Array(0);

@@ -1,5 +1,5 @@
 // Календарь: месяц клетками, с отметками съеденного. Нужен, чтобы посмотреть прошедшие дни
-// и вернуться в любой из них — записи, нормы и правки там те же, что и на экране «Сегодня».
+// и вернуться в любой из них: записи, нормы и правки там те же, что и на экране «Сегодня».
 import { WEEKDAY_SHORT, monthGrid, monthStart, monthTitle, shiftMonth, totalsByDay } from '../calendar.js';
 import * as db from '../db.js';
 import { loadDay, store } from '../state.js';
@@ -31,7 +31,7 @@ export function mount(container) {
       h('div', { class: 'cal-weekdays' }, WEEKDAY_SHORT.map((day) => h('div', { text: day }))),
       grid),
     h('p', { class: 'tiny faint' },
-      'Нажмите день, чтобы открыть его записи. Число под днём — сколько за этот день съедено.'));
+      'Нажмите день, чтобы открыть его записи. Число под днём: сколько за этот день съедено.'));
 
   /** Открывает день: он показывается тем же экраном, что и сегодняшний. */
   async function openDay(iso) {

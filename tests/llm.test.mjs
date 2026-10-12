@@ -159,7 +159,7 @@ test('временная ошибка сети повторяется', async ()
   assert.equal(provider.calls.length, 2);
 });
 
-test('измерения из отчёта разбираются, пустой ответ — ошибка', () => {
+test('измерения из отчёта разбираются, пустой ответ это ошибка', () => {
   // Пример выдуман для тестов: никаких реальных измерений здесь нет.
   const answer = JSON.stringify({
     date: '2026-09-15', sex: 'M', age: 41, height: 176, weight: 82, waist: 88, hips: 96,
@@ -210,7 +210,7 @@ test('уточнение уходит вместе с текущим разбо�
   assert.equal(provider.calls[0].image, null);
 });
 
-test('вопрос без позиций — это ответ, а не ошибка', () => {
+test('вопрос без позиций это ответ, а не ошибка', () => {
   // Так бывает в начале разговора: человек сказал слишком мало, считать пока нечего.
   const parsed = parseAnalysis(JSON.stringify({
     dish: '', items: [], question: 'А что именно вы съели?',
@@ -233,13 +233,13 @@ test('уточняющий вопрос разбирается и обрезае
     source: 'estimate',
     basis: 'per_portion',
     items: [{ name: 'Гречка', grams: 200, kcal: 220, protein: 8, fat: 2, carbs: 40 }],
-    question: '  Сколько примерно было гречки — граммов двести?  ',
+    question: '  Сколько примерно было гречки, граммов двести?  ',
     confidence: 'low',
     assumptions: 'Вес оценён.',
   });
   const parsed = parseAnalysis(withQuestion);
   assert.equal(parsed.ok, true);
-  assert.equal(parsed.data.question, 'Сколько примерно было гречки — граммов двести?');
+  assert.equal(parsed.data.question, 'Сколько примерно было гречки, граммов двести?');
   // Разбор при вопросе всё равно приходит целиком: его видно, пока идёт разговор.
   assert.equal(parsed.data.items.length, 1);
 });

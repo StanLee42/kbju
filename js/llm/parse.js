@@ -20,7 +20,7 @@ export function extractJson(text) {
   try {
     return JSON.parse(candidate);
   } catch {
-    // Ищем первый { и последний } — так выживает ответ с пояснением вокруг.
+    // Ищем первый { и последний }: так выживает ответ с пояснением вокруг.
     const start = candidate.indexOf('{');
     const end = candidate.lastIndexOf('}');
     if (start === -1 || end <= start) return null;
@@ -91,7 +91,7 @@ export function parseAnalysis(text) {
     .filter(Boolean);
 
   // Разговор может начаться с вопроса: человек сказал слишком мало, и считать нечего.
-  // Тогда вопрос и есть ответ, а разбора пока нет — это не ошибка ответа модели.
+  // Тогда вопрос и есть ответ, а разбора пока нет: это не ошибка ответа модели.
   if (!items.length) {
     if (question) {
       return {

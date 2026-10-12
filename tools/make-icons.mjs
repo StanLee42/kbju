@@ -1,6 +1,6 @@
 // Генератор PNG-иконок приложения. Запускается вручную:
 //   node tools/make-icons.mjs
-// Рисует те же кольца, что и icons/icon.svg, но растром — чтобы на Android
+// Рисует те же кольца, что и icons/icon.svg, но растром: чтобы на Android
 // иконка установки выглядела правильно и не зависела от SVG в манифесте.
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -169,7 +169,7 @@ function render(size) {
 }
 
 mkdirSync(outDir, { recursive: true });
-// 180 — размер иконки на домашнем экране iPhone, 192 и 512 — для Android и манифеста.
+// 180: размер иконки на домашнем экране iPhone; 192 и 512: для Android и манифеста.
 for (const size of [180, 192, 512]) {
   const file = join(outDir, `icon-${size}.png`);
   writeFileSync(file, render(size));

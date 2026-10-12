@@ -74,7 +74,7 @@ async function main() {
     const hadController = Boolean(navigator.serviceWorker.controller);
     let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // Первая установка тоже забирает управление — перезагружаться из-за неё незачем.
+      // Первая установка тоже забирает управление, перезагружаться из-за неё незачем.
       if (!hadController || reloading) return;
       reloading = true;
       location.reload();
@@ -91,7 +91,7 @@ async function main() {
     registration?.update().catch(() => {});
 
     // Служба может оказаться новее страницы: тогда на телефоне работает прежний код,
-    // хотя строка версии показывает новую сборку — так владелец и не нашёл новую кнопку.
+    // хотя строка версии показывает новую сборку: так владелец и не нашёл новую кнопку.
     // Сравниваем версию самого кода с версией службы и один раз выравниваем перезагрузкой.
     const serviceWorkerVersion = await new Promise((resolve) => {
       const controller = navigator.serviceWorker.controller;
@@ -118,14 +118,14 @@ async function main() {
       }
     }
 
-    // Телефон держит приложение в памяти и не открывает его заново — значит, и новую
+    // Телефон держит приложение в памяти и не открывает его заново, значит, и новую
     // сборку не проверяет: браузер спрашивает о ней только при загрузке страницы.
     // Поэтому спрашиваем сами каждый раз, когда человек возвращается к приложению:
     // запрос к sw.js крошечный, а свежесть важнее. Второй проверки одновременно не бывает.
     let checking = false;
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState !== 'visible') return;
-      // Вернулись к приложению утром — показываем новый день, а не вчерашний.
+      // Вернулись к приложению утром: показываем новый день, а не вчерашний.
       await refreshToday().catch(() => {});
       if (!registration || checking) return;
       checking = true;

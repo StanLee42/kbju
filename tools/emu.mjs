@@ -1,7 +1,7 @@
 // Управление эмулятором Android (или подключённым телефоном) через adb.
 //
 // Зачем: проверки в headless Chrome не видят всего, что видит настоящий Chrome
-// на Android — установку иконки, поведение касаний, работу с файлами. Здесь же
+// на Android: установку иконки, поведение касаний, работу с файлами. Здесь же
 // можно жать по координатам и по тексту надписи, снимать экран и открывать адреса.
 //
 // Запуск:
@@ -59,7 +59,7 @@ switch (command) {
   case 'ui': {
     const nodes = uiNodes();
     for (const node of nodes.slice(0, 60)) {
-      console.log(`  ${node.text} — (${node.x}, ${node.y})`);
+      console.log(`  ${node.text}: (${node.x}, ${node.y})`);
     }
     console.log(`всего надписей: ${nodes.length}`);
     break;
