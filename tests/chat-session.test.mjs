@@ -205,6 +205,7 @@ const parseAnswer = {
   name: 'Творог 5%',
   values: { kcal: 60, protein: 9, fat: 2.5, carbs: 2 },
   basisGrams: 30,
+  packageWeight: 300,
   hasNumbers: true,
   source: 'label',
   confidence: 'high',
@@ -228,6 +229,7 @@ test('разбор упаковки возвращается после пере
   assert.equal(back.messages[0].photo, 'data:image/jpeg;base64,AAAA');
   assert.equal(back.messages[1].answer.name, 'Творог 5%');
   assert.equal(back.draft.basisGrams, 30);
+  assert.equal(back.draft.packageWeight, 300, 'вес упаковки уходит модели вместе с разбором');
   assert.equal(back.cost, 0.0004);
   assert.equal(back.product.per100.kcal, 200);
 });

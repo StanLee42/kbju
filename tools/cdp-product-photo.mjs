@@ -480,12 +480,77 @@ check(second.entries === 0, 'второй разбор записал что-т�
 check(JSON.parse(afterSecond || '{}').line?.includes('203'),
   'в списке не видно новых значений продукта');
 
-console.log('шаг 10: лишних запросов нет');
-const after = JSON.parse(await evaluate(
+console.log('шаг 10: закрытие окна заканчивает разбор, а перезагрузка его сохраняет');
+// Счётчики снимаем до последней перезагрузки: она обнуляет их вместе со страницей.
+const final = JSON.parse(await evaluate(
   'JSON.stringify({ calls: window.__modelCalls, prompts: window.__prompts })',
 ) || '{}');
-const calls = (before.calls || 0) + (after.calls || 0);
-const bodies = [...(before.prompts || []), ...(after.prompts || [])];
+
+const afterSave = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const inputs = [...document.querySelectorAll('#sheetRoot input')];
+  const area = root().querySelector('textarea.composer-input');
+  return JSON.stringify({
+    messages: document.querySelectorAll('#sheetRoot .msg').length,
+    bar: document.querySelector('#sheetRoot .draft-bar')?.innerText?.replace(/\\n/g, ' ') || '',
+    name: inputs.find((input) => input.type === 'text')?.value || '',
+    typed: area ? area.value : null,
+  });
+})()`);
+const cleared = JSON.parse(afterSave || '{}');
+console.log('   ', afterSave);
+check(cleared.messages === 0, 'после сохранения продукта прежний разбор вернулся в окно');
+check(cleared.name === '' && cleared.bar === '', 'после сохранения осталась карточка прежнего продукта');
+
+// Набранные слова переживают перезагрузку страницы.
+await evaluate(`(async () => {
+  ${HELPERS}
+  const area = root().querySelector('textarea.composer-input');
+  area.value = 'творог пять процентов';
+  area.dispatchEvent(new Event('input', { bubbles: true }));
+  return 'ok';
+})()`);
+await send('Page.reload', { ignoreCache: false });
+await wait(2500);
+const typedBack = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.getElementById('addButton'));
+  await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const area = root().querySelector('textarea.composer-input');
+  return JSON.stringify({ typed: area ? area.value : null });
+})()`);
+const typed = JSON.parse(typedBack || '{}');
+console.log('   ', typedBack);
+check(typed.typed === 'творог пять процентов',
+  `набранные слова не пережили перезагрузку: ${JSON.stringify(typed.typed)}`);
+
+// Закрытие окна заканчивает разбор: следующий вход начинается с пустого окна.
+const closed = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.querySelector('#sheetRoot .sheet-backdrop'));
+  await wait(400);
+  await click(document.getElementById('addButton'));
+  await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const area = root().querySelector('textarea.composer-input');
+  return JSON.stringify({
+    typed: area ? area.value : null,
+    messages: document.querySelectorAll('#sheetRoot .msg').length,
+  });
+})()`);
+const fresh = JSON.parse(closed || '{}');
+console.log('   ', closed);
+check(!fresh.typed, 'закрытое окно вернуло набранные слова');
+check(fresh.messages === 0, 'закрытое окно вернуло прежнюю переписку');
+
+console.log('шаг 11: лишних запросов нет');
+const calls = (before.calls || 0) + (final.calls || 0);
+const bodies = [...(before.prompts || []), ...(final.prompts || [])];
 const prompts = JSON.stringify(bodies);
 const modelCalls = requests.filter((request) => request.includes('api.deepseek.com'));
 // Снимок уходит в каждом запросе, включая повтор по кнопке: адрес данных должен быть

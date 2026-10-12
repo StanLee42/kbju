@@ -248,6 +248,9 @@ function cleanParse(value) {
   }
   const basis = numberOr(value.basisGrams, 0);
   if (basis > 0) parse.basisGrams = basis;
+  // Вес упаковки в расчёте не участвует, но уходит модели следующим сообщением.
+  const packageWeight = numberOr(value.packageWeight, 0);
+  if (packageWeight > 0) parse.packageWeight = packageWeight;
   if (Array.isArray(value.warnings)) {
     parse.warnings = value.warnings.filter((item) => typeof item === 'string');
   }
