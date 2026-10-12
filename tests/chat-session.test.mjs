@@ -6,6 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { clearChat, loadChat, loadTyped, saveChat, saveTyped } from '../js/chat-session.js';
+import {
+  clearProductParse, loadProductParse, loadProductTyped, saveProductParse, saveProductTyped,
+} from '../js/chat-session.js';
 
 /** Хранилище как в браузере, но в памяти. Предел повторяет поведение при переполнении. */
 function memoryStorage({ limit = Infinity } = {}) {
@@ -195,4 +198,124 @@ test('недоступное хранилище не ломает разгово
   assert.equal(loadTyped({ storage: broken }), '');
   assert.equal(saveTyped('каша', { storage: broken }), false);
   clearChat({ storage: broken });
+});
+
+// Разбор снимка упаковки: то же хранение, но без привязки ко дню.
+const parseAnswer = {
+  name: 'Творог 5%',
+  values: { kcal: 60, protein: 9, fat: 2.5, carbs: 2 },
+  basisGrams: 30,
+  hasNumbers: true,
+  source: 'label',
+  confidence: 'high',
+  assumptions: 'С таблицы на порцию.',
+  warnings: [],
+};
+const savedProduct = { name: 'Творог 5%', per100: { kcal: 200, protein: 30, fat: 8.3, carbs: 6.7 } };
+
+test('разбор упаковки возвращается после перезагрузки целиком', () => {
+  const storage = memoryStorage();
+  const messages = [
+    { role: 'user', text: 'это творог', photo: 'data:image/jpeg;base64,AAAA' },
+    { role: 'assistant', answer: { ...parseAnswer, cost: 0.0004 } },
+  ];
+
+  saveProductParse({ messages, product: savedProduct, draft: parseAnswer, cost: 0.0004 }, { storage });
+
+  const back = loadProductParse({ storage });
+  assert.equal(back.messages.length, 2);
+  assert.equal(back.messages[0].text, 'это творог');
+  assert.equal(back.messages[0].photo, 'data:image/jpeg;base64,AAAA');
+  assert.equal(back.messages[1].answer.name, 'Творог 5%');
+  assert.equal(back.draft.basisGrams, 30);
+  assert.equal(back.cost, 0.0004);
+  assert.equal(back.product.per100.kcal, 200);
+});
+
+test('поправленное число переживает перезагрузку', () => {
+  const storage = memoryStorage();
+  const edited = { name: 'Творог 5%', per100: { ...savedProduct.per100, kcal: 201 } };
+  saveProductParse({ messages: [], product: edited }, { storage });
+
+  assert.equal(loadProductParse({ storage }).product.per100.kcal, 201);
+});
+
+test('разбор упаковки не привязан ко дню', () => {
+  // Дня в записи нет: продукт один для всего списка, а не на дату.
+  const storage = memoryStorage();
+  saveProductParse({ product: savedProduct }, { storage });
+
+  assert.equal(loadProductParse({ storage }).product.per100.protein, 30);
+});
+
+test('битая запись разбора не ломает окно', () => {
+  const storage = memoryStorage();
+  storage.setItem('kbju-product-parse', '{это не json');
+  assert.equal(loadProductParse({ storage }), null);
+
+  storage.setItem('kbju-product-parse', JSON.stringify({ v: 99, messages: [] }));
+  assert.equal(loadProductParse({ storage }), null);
+
+  // Карточка без значений не восстанавливается: сохранять по ней нечего.
+  storage.setItem('kbju-product-parse', JSON.stringify({ v: 1, messages: [], product: { name: 'Творог' } }));
+  assert.equal(loadProductParse({ storage }), null);
+});
+
+test('пустой разбор упаковки не затирает прежний', () => {
+  const storage = memoryStorage();
+  saveProductParse({ product: savedProduct }, { storage });
+
+  // Окно открыли и закрыли, ничего не разобрав: прежнюю запись не трогаем.
+  saveProductParse({ messages: [], product: null }, { storage });
+
+  assert.equal(loadProductParse({ storage }).product.per100.kcal, 200);
+});
+
+test('при нехватке места снимок упаковки отбрасывается, числа остаются', () => {
+  const storage = memoryStorage({ limit: 600 });
+  const photo = `data:image/jpeg;base64,${'A'.repeat(2000)}`;
+
+  saveProductParse({ messages: [{ role: 'user', text: 'творог', photo }], product: savedProduct }, { storage });
+
+  const back = loadProductParse({ storage });
+  assert.equal(back.messages.length, 1);
+  assert.equal(back.messages[0].text, 'творог');
+  assert.equal(back.messages[0].photo, null);
+  assert.equal(back.product.per100.kcal, 200);
+});
+
+test('набранные слова к снимку возвращаются отдельно от разбора', () => {
+  const storage = memoryStorage();
+  saveProductTyped('творог 5 процентов', { storage });
+
+  assert.equal(loadProductTyped({ storage }), 'творог 5 процентов');
+  assert.equal(loadProductParse({ storage }), null);
+
+  saveProductTyped('', { storage });
+  assert.equal(loadProductTyped({ storage }), '');
+});
+
+test('очистка стирает и разбор упаковки, и набранные слова', () => {
+  const storage = memoryStorage();
+  saveProductParse({ product: savedProduct }, { storage });
+  saveProductTyped('творог', { storage });
+
+  clearProductParse({ storage });
+
+  assert.equal(loadProductParse({ storage }), null);
+  assert.equal(loadProductTyped({ storage }), '');
+});
+
+test('недоступное хранилище не ломает разбор упаковки', () => {
+  const broken = {
+    getItem: () => { throw new Error('данные сайта запрещены'); },
+    setItem: () => { throw new Error('данные сайта запрещены'); },
+    removeItem: () => { throw new Error('данные сайта запрещены'); },
+  };
+
+  assert.equal(saveProductParse({ product: savedProduct }, { storage: broken }), false);
+  assert.equal(loadProductParse({ storage: broken }), null);
+  assert.equal(loadProductTyped({ storage: broken }), '');
+  assert.equal(saveProductTyped('творог', { storage: broken }), false);
+  clearProductParse({ storage: broken });
 });
