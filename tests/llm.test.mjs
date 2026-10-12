@@ -2,10 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { KINDS, analyzeChat, analyzeFood, discussNorms, readImpedance } from '../js/llm/index.js';
+import { KINDS, analyzeChat, analyzeFood, discussNorms, readImpedance, readProduct } from '../js/llm/index.js';
 import { providerError } from '../js/llm/errors.js';
-import { extractJson, parseAnalysis, parseImpedance, parseNorms } from '../js/llm/parse.js';
-import { CHAT_SYSTEM_PROMPT, NORMS_SYSTEM_PROMPT, SYSTEM_PROMPT } from '../js/llm/prompt.js';
+import { extractJson, parseAnalysis, parseImpedance, parseNorms, parseProduct } from '../js/llm/parse.js';
+import {
+  CHAT_SYSTEM_PROMPT, NORMS_SYSTEM_PROMPT, PRODUCT_SYSTEM_PROMPT, SYSTEM_PROMPT,
+} from '../js/llm/prompt.js';
 
 const validAnswer = JSON.stringify({
   dish: 'Паста с сыром',
@@ -17,6 +19,20 @@ const validAnswer = JSON.stringify({
   ],
   confidence: 'high',
   assumptions: 'Соус не учтён.',
+});
+
+// Ответ по снимку упаковки: таблица напечатана на порцию 30 г, а не на 100 г.
+const productAnswer = JSON.stringify({
+  name: 'Творог 5%',
+  source: 'label',
+  basisGrams: 30,
+  kcal: 60,
+  protein: 9,
+  fat: 2.5,
+  carbs: 2,
+  packageWeight: 300,
+  confidence: 'high',
+  assumptions: 'Значения взяты с таблицы на порцию.',
 });
 
 function stubProvider(responses) {
@@ -330,4 +346,85 @@ test('промпт про нормы запрещает модели счита�
   assert.match(NORMS_SYSTEM_PROMPT, /НЕ считаешь калории и БЖУ сам/);
   assert.match(NORMS_SYSTEM_PROMPT, /"params"/);
   assert.match(NORMS_SYSTEM_PROMPT, /pace/);
+});
+
+test('ответ по снимку упаковки разбирается целиком', () => {
+  const parsed = parseProduct(productAnswer);
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.name, 'Творог 5%');
+  assert.equal(parsed.data.basisGrams, 30, 'граммовка таблицы сохранена для пересчёта');
+  assert.equal(parsed.data.values.kcal, 60);
+  assert.equal(parsed.data.values.fat, 2.5);
+  assert.equal(parsed.data.packageWeight, 300);
+  assert.equal(parsed.data.hasNumbers, true);
+  assert.deepEqual(parsed.data.warnings, []);
+});
+
+test('вопрос без значений это ответ, а не ошибка', () => {
+  // Таблица не попала в кадр: считать нечего, но разбор не сломан.
+  const parsed = parseProduct(JSON.stringify({ question: 'Таблица не в кадре, пришлите ещё раз' }));
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.hasNumbers, false);
+  assert.match(parsed.data.question, /ещё раз/);
+});
+
+test('ответ без значений и без вопроса считается ошибкой', () => {
+  assert.equal(parseProduct(JSON.stringify({ name: 'Творог' })).ok, false);
+  assert.equal(parseProduct('не json').ok, false);
+});
+
+test('граммовка не пришла: значения считаются на 100 г, и это отмечено', () => {
+  const parsed = parseProduct(JSON.stringify({
+    name: 'Овсяные хлопья', kcal: 350, protein: 12, fat: 6, carbs: 60,
+  }));
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.basisGrams, 100);
+  assert.ok(parsed.data.warnings.some((warning) => warning.includes('граммовка')),
+    'замечание о граммовке человек видит в разборе');
+});
+
+test('минус в значениях отсекается, а пустое название попадает в замечания', () => {
+  const parsed = parseProduct(JSON.stringify({ name: '', kcal: -20, protein: 5 }));
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.data.values.kcal, 0);
+  assert.ok(parsed.data.warnings.some((warning) => warning.includes('название')),
+    'без названия продукт не сохранить, и об этом сказано');
+});
+
+test('разбор упаковки ходит через тот же слой с повторами', async () => {
+  const provider = stubProvider([{ text: productAnswer }]);
+  const result = await readProduct({
+    provider,
+    image: { base64: 'AAA', mime: 'image/png' },
+    text: 'это творог',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.name, 'Творог 5%');
+  assert.equal(provider.calls[0].system, PRODUCT_SYSTEM_PROMPT);
+  assert.equal(provider.calls[0].image.mime, 'image/png');
+  assert.ok(provider.calls[0].text.includes('это творог'), 'слова человека уходят модели');
+  assert.equal(provider.calls[0].maxTokens > 0, true);
+});
+
+test('уточнение к упаковке уходит вместе с прочитанным', async () => {
+  const draft = { name: 'Творог 5%', basisGrams: 30, values: { kcal: 60 } };
+  const provider = stubProvider([{ text: productAnswer }]);
+  await readProduct({ provider, text: 'это на порцию 30 г', draft });
+
+  const message = provider.calls[0].text;
+  assert.ok(message.includes('Что уже прочитано'), 'прочитанное передано модели');
+  assert.ok(message.includes('Творог 5%'), 'видно прежнее название');
+  assert.ok(message.includes('это на порцию 30 г'), 'и новое сообщение человека');
+});
+
+test('промпт разбора упаковки требует граммовку и запрещает подставлять чужие числа', () => {
+  assert.match(PRODUCT_SYSTEM_PROMPT, /basisGrams/);
+  assert.match(PRODUCT_SYSTEM_PROMPT, /без пересчёта/);
+  assert.match(PRODUCT_SYSTEM_PROMPT, /не подставляй из похожих/);
+  assert.match(PRODUCT_SYSTEM_PROMPT, /"name"/);
 });

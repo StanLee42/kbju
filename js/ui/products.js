@@ -4,19 +4,13 @@
 import { fill, h, nowTime, num, round } from '../util.js';
 import {
   ORDERS, forWeight, itemFromProduct, listProducts, matchByName, nameProblem, orderProducts,
-  removeProduct, saveProduct, searchProducts, touchProduct,
+  per100Line, removeProduct, saveProduct, searchProducts, touchProduct,
 } from '../products.js';
 import { addEntryFromProduct, store } from '../state.js';
 import { openSheet, toast } from './components/sheet.js';
+import { openProductPhoto } from './product-photo.js';
 
 const VALUE_KEYS = ['kcal', 'protein', 'fat', 'carbs'];
-
-/** Строка значений продукта: «140 ккал · Б 7 · Ж 4 · У 10 на 100 г». */
-function per100Line(per100 = {}) {
-  const value = (key) => round(per100?.[key] ?? 0, 1);
-  return `${value('kcal')} ккал · Б ${value('protein')} · Ж ${value('fat')}`
-    + ` · У ${value('carbs')} на 100 г`;
-}
 
 export async function openProductsSheet({ title = 'Мои продукты', date = null, onPick = null } = {}) {
   const targetDate = date || store.date;
@@ -86,10 +80,24 @@ export async function openProductsSheet({ title = 'Мои продукты', dat
         h('div', { class: 'chips', style: 'margin-bottom:10px' }, orderButtons),
         h('label', { class: 'field field-compact' }, searchInput),
         rows),
-      actions: [h('button', {
-        class: 'btn-primary', type: 'button', text: 'Добавить продукт',
-        onclick: () => showForm(null),
-      })],
+      actions: [
+        h('button', {
+          class: 'btn-primary', type: 'button', text: 'Добавить продукт',
+          onclick: () => showForm(null),
+        }),
+        // Второй способ завести продукт: разбор снимка упаковки. Ручной ввод остаётся
+        // для того, чего на снимке нет.
+        h('button', {
+          class: 'btn btn-small', type: 'button', text: 'Снимок упаковки',
+          onclick: () => openProductPhoto({
+            // Разбор закрылся: список показывается заново, и в нём уже новый продукт.
+            onSaved: async () => {
+              await reload();
+              showList();
+            },
+          }),
+        }),
+      ],
     });
   }
 
