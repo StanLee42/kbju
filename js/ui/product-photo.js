@@ -15,6 +15,7 @@ import {
 } from '../chat-session.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, num, round } from '../util.js';
+import { imageFromDataUrl } from '../media/image.js';
 import { createComposer } from './components/composer.js';
 import { openSheet, toast } from './components/sheet.js';
 
@@ -228,13 +229,6 @@ export function openProductPhoto({ onSaved = null } = {}) {
       role: message.role,
       text: message.text || message.answer?.question || '',
     }));
-  }
-
-  /** Разбирает адрес данных на части: повтор запроса отправляет тот же снимок. */
-  function imageFromDataUrl(dataUrl) {
-    const [head, body] = String(dataUrl).split(',');
-    const mime = (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
-    return { base64: body, mime };
   }
 
   /** Повторяет неудачный запрос: то же сообщение человека и тот же разбор до него. */
