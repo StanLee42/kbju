@@ -122,6 +122,8 @@ export async function addEntry(data) {
     source: data.source || 'manual',
     // Поля, которые заполняются только у записей из фотографии.
     items: Array.isArray(data.items) ? data.items : null,
+    // Строки, из которых собрана объединённая запись: по ним она разбирается обратно.
+    parts: Array.isArray(data.parts) ? data.parts : null,
     thumbId: data.thumbId || null,
     basis: data.basis || null,
     confidence: data.confidence || null,
