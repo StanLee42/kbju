@@ -38,6 +38,20 @@ const modelAnswer = {
   assumptions: 'Значения взяты с таблицы на порцию.',
 };
 
+// Ответ второго разбора: таблицы на снимке нет, поэтому значения идут оценкой, а название
+// то же самое. Проверка убеждается, что продукт обновился, а второй строки не появилось.
+const estimateAnswer = {
+  name: modelAnswer.name,
+  source: 'estimate',
+  basisGrams: 100,
+  kcal: 203,
+  protein: 31,
+  fat: 8,
+  carbs: 7,
+  confidence: 'low',
+  assumptions: 'Оценка по виду продукта.',
+};
+
 const envText = await readFile(join(root, '.env.local'), 'utf8').catch(() => '');
 const apiKey = envText.match(/^DEEPSEEK_API_KEY\s*=\s*(.+)$/m)?.[1]?.trim();
 if (!apiKey) {
@@ -164,6 +178,7 @@ await evaluate(`(async () => {
 console.log('шаг 1: ответ модели подставляется, запрос наружу не уходит');
 const stubbed = await evaluate(`(() => {
   const answer = ${JSON.stringify(modelAnswer)};
+  const estimate = ${JSON.stringify(estimateAnswer)};
   window.__modelCalls = 0;
   window.__prompts = [];
   const real = window.fetch.bind(window);
@@ -174,7 +189,9 @@ const stubbed = await evaluate(`(() => {
     window.__prompts.push(String(init.body || ''));
     // Первый ответ приходит не по схеме дважды: слой провайдеров повторяет запрос сам,
     // и только после второй неудачи ошибку видит человек, а повтор запускает он.
-    const content = window.__modelCalls <= 2 ? 'извините, не могу' : JSON.stringify(answer);
+    const content = window.__modelCalls <= 2
+      ? 'извините, не могу'
+      : JSON.stringify(window.__modelCalls === 3 ? answer : estimate);
     return new Response(JSON.stringify({
       choices: [{ message: { content }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 1200, completion_tokens: 60 },
@@ -350,7 +367,65 @@ check(kept.entries === 0, `разбор упаковки записал что-�
 check(kept.thumbs === 0, 'снимок упаковки сохранён в хранилище');
 check((kept.usageKinds || []).includes('photo'), `разбор не попал в журнал как анализ фото: ${JSON.stringify(kept.usageKinds)}`);
 
-console.log('шаг 8: лишних запросов нет');
+console.log('шаг 8: второй разбор без таблицы и с тем же названием');
+// Второй ответ приходит оценкой и с тем же названием: проверяем и подпись «это оценка»,
+// и то, что продукт с таким названием обновляется, а не заводится второй раз.
+await evaluate(`(async () => {
+  ${HELPERS}
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await click(byText('#sheetRoot .btn', '🖼 Из галереи'));
+  return 'ok';
+})()`);
+await wait(300);
+await setFile(photoPath);
+await wait(700);
+await evaluate(`(async () => {
+  ${HELPERS}
+  await click(byText('#sheetRoot .btn-primary', 'Отправить'));
+  return 'ok';
+})()`);
+
+const note = await waitFor(`(() => {
+  const text = document.querySelector('#sheetRoot .msg-assistant')?.innerText || '';
+  return /оценка по снимку/.test(text) ? text.replace(/\\n/g, ' · ') : null;
+})()`, { label: 'подпись о том, что числа не из таблицы' });
+console.log('    ', note);
+
+await evaluate(`(async () => {
+  ${HELPERS}
+  await click(byText('#sheetRoot .btn-primary', 'В мои продукты'));
+  return 'ok';
+})()`);
+
+const afterSecond = await waitFor(`(() => {
+  const names = [...document.querySelectorAll('#sheetRoot .product-name')].map((node) => node.textContent);
+  return names.length ? JSON.stringify({
+    names, line: document.querySelector('#sheetRoot .product-values')?.textContent || '',
+  }) : null;
+})()`, { timeout: 15000, label: 'список после второго разбора' }).catch(() => null);
+console.log('    ', afterSecond);
+
+const counted = await evaluate(`(async () => {
+  const products = await import('/js/products.js');
+  const db = await import('/js/db.js');
+  const rows = await products.listProducts();
+  const entries = await db.all('entries');
+  return JSON.stringify({
+    count: rows.length,
+    names: rows.map((row) => row.name),
+    per100: rows[0]?.per100 || null,
+    entries: entries.length,
+  });
+})()`);
+const second = JSON.parse(counted || '{}');
+console.log('   ', counted);
+check(second.count === 1, `продуктов в списке ${second.count}, а с тем же названием должен остаться один`);
+check(second.per100?.kcal === 203, 'значения существующего продукта не обновились');
+check(second.entries === 0, 'второй разбор записал что-то в дневник');
+check(JSON.parse(afterSecond || '{}').line?.includes('203'),
+  'в списке не видно новых значений продукта');
+
+console.log('шаг 9: лишних запросов нет');
 const calls = await evaluate('window.__modelCalls');
 const prompts = await evaluate('JSON.stringify(window.__prompts)');
 const modelCalls = requests.filter((request) => request.includes('api.deepseek.com'));
@@ -365,9 +440,9 @@ console.log('    снимок в запросах:', JSON.stringify(images));
 // Снимок в окне показывается адресом данных или ссылкой на blob, это не запрос наружу.
 const external = requests.filter((request) => !request.startsWith(url.split('#')[0])
   && !request.startsWith('data:') && !request.startsWith('blob:'));
-console.log('    обращений к модели из страницы:', calls, '(неудачная попытка и повтор) · ушло в сеть:',
+console.log('    обращений к модели из страницы:', calls, '· ушло в сеть:',
   modelCalls.length, '· наружу:', JSON.stringify(external));
-check(calls === 3, `разбор обратился к модели ${calls} раза вместо трёх: две неудачные попытки и повтор по кнопке`);
+check(calls === 4, `разбор обратился к модели ${calls} раза вместо четырёх: две неудачные попытки, повтор по кнопке и второй разбор`);
 check(images.every((item) => item.hasImage && item.markers === 1),
   `снимок ушёл не в каждом запросе или собран неверно: ${JSON.stringify(images)}`);
 check(/Заполни карточку продукта|Новое сообщение человека/.test(prompts || ''),
