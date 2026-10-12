@@ -13,7 +13,7 @@ const entries = [
 ];
 
 test('обзор дня отдаёт норму, съеденное и остаток', () => {
-  // 2026-10-05 — понедельник, обычный день: 2000 ккал, Б130 Ж65 У200.
+  // 2026-10-05 понедельник, обычный день: 2000 ккал, Б130 Ж65 У200.
   const overview = dayOverview({ date: '2026-10-05', settings, entries });
   assert.equal(overview.dayType.id, 'rest');
   assert.equal(overview.norm.kcal, 2000);
@@ -29,7 +29,7 @@ test('записи в обзоре идут по времени, а не как 
 });
 
 test('в тренировочный день норма другая', () => {
-  // 2026-10-07 — среда, тренировка.
+  // 2026-10-07 среда, тренировка.
   const overview = dayOverview({ date: '2026-10-07', settings, entries });
   assert.equal(overview.dayType.id, 'train');
   assert.equal(overview.norm.kcal, 2400);

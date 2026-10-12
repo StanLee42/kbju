@@ -67,7 +67,7 @@ test('без тощей массы она оценивается, и об это
   assert.match(result.assumptions.join(' '), /75%/);
 });
 
-test('не хватает данных — понятная ошибка, а не тихие нули', () => {
+test('не хватает данных: понятная ошибка, а не тихие нули', () => {
   assert.equal(normsFromMeasurement({ measurement: {} }).ok, false);
   assert.match(normsFromMeasurement({ measurement: {} }).error, /не хватает/);
   assert.equal(normsFromMeasurement({ measurement: { bmr: 1800 } }).ok, false);

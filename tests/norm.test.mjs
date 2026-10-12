@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS, dayTypeById, kcalFromMacros, macrosForKcal, remaining
 const settings = structuredClone(DEFAULT_SETTINGS);
 
 test('тип дня берётся из недельной сетки', () => {
-  // 2026-10-05 — понедельник, 2026-10-07 — среда.
+  // 2026-10-05 понедельник, 2026-10-07 среда.
   assert.equal(resolveDayTypeId('2026-10-05', settings), 'rest');
   assert.equal(resolveDayTypeId('2026-10-07', settings), 'train');
   assert.equal(resolveDayTypeId('2026-10-09', settings), 'train');
@@ -47,11 +47,11 @@ test('битая настройка не ломает разрешение ти�
 });
 
 test('расписание без исключений считается отдельно от ручного выбора', () => {
-  // 2026-10-07 — среда, по расписанию тренировка.
+  // 2026-10-07 среда, по расписанию тренировка.
   const withOverride = { ...settings, dateOverrides: { '2026-10-07': 'rest' } };
   assert.equal(resolveDayTypeId('2026-10-07', withOverride), 'rest');
   assert.equal(scheduledDayTypeId('2026-10-07', withOverride), 'train');
-  // Совпадает с расписанием — значит ручное исключение не нужно.
+  // Совпадает с расписанием, значит ручное исключение не нужно.
   assert.equal(scheduledDayTypeId('2026-10-07', withOverride), 'train');
   assert.equal(scheduledDayTypeId('2026-10-05', withOverride), 'rest');
 });

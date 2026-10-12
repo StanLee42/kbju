@@ -95,7 +95,7 @@ async function main() {
   }
   await writeFile(swPath, stamped, 'utf8');
   await writeCodeVersion(version);
-  console.log(`версия сборки: ${version} — кэш обновится при первой загрузке`);
+  console.log(`версия сборки: ${version}: кэш обновится при первой загрузке`);
   console.log(`в офлайн-кэш включено файлов: ${shell.length}`);
 
   // Версию видно и снаружи: файл читается приложением на экране настроек,
