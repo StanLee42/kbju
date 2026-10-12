@@ -32,7 +32,7 @@ if (!process.env.NODE_EXTRA_CA_CERTS && !process.env.KBJU_CA_RETRY && process.pl
     try {
       parts.push(execFileSync('security', ['find-certificate', '-a', '-p', keychain], { encoding: 'utf8' }));
     } catch {
-      // Недоступная связка не повод останавливаться.
+      // Недоступная связка это не повод останавливаться.
     }
   }
   if (parts.join('').includes('BEGIN CERTIFICATE')) {
