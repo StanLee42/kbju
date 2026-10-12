@@ -87,6 +87,9 @@ await send('Network.enable');
 await send('Page.enable');
 // Кэш выключен: иначе браузер отдаёт прежнюю версию модуля, и проверка судит по старому коду.
 await send('Network.setCacheDisabled', { cacheDisabled: true });
+// Служебный работник обходится по той же причине: на порту мог остаться работник прошлого
+// прогона, и он отдаёт прежнюю страницу приложения вместо свежей.
+await send('Network.setBypassServiceWorker', { bypass: true });
 await send('Page.navigate', { url });
 await wait(3000);
 
@@ -100,19 +103,58 @@ await send('Page.reload', { ignoreCache: true });
 await wait(2500);
 requests.length = 0;
 
-console.log('шаг 1: окно добавления и пустой список продуктов');
+console.log('шаг 1: вкладка продуктов, вход из разговора и пустой список');
 const emptyState = await evaluate(`(async () => {
   ${HELPERS}
+  const tabs = [...document.querySelectorAll('#tabbar .tab')].map((node) => node.textContent.trim());
+  const products = document.getElementById('productsButton');
+  await click(products);
+  await wait(300);
+  const fromTab = root().innerText.includes('Мои продукты');
+  const empty = root().innerText.includes('Список пуст');
+  await click(document.querySelector('#sheetRoot .sheet-backdrop'));
+  await wait(300);
   await click(document.getElementById('addButton'));
   const entry = Boolean(byText('#sheetRoot .btn', 'Из моих продуктов'));
   await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
-  const text = root().innerText;
-  return JSON.stringify({ entry, text, empty: text.includes('Список пуст') });
+  return JSON.stringify({ tabs, fromTab, empty, entry, text: root().innerText });
 })()`);
 const empty = JSON.parse(emptyState || '{}');
 console.log('   ', emptyState);
-check(empty.entry, 'в окне разговора нет входа в список продуктов');
+check(empty.fromTab, 'вкладка «Продукты» не открыла список');
 check(empty.empty, 'пустой список не показал приглашение завести первый продукт');
+check(empty.entry, 'в окне разговора нет входа в список продуктов');
+check((empty.tabs || []).some((label) => label.includes('Продукты')),
+  `в нижней панели нет вкладки продуктов: ${JSON.stringify(empty.tabs)}`);
+check(!(empty.tabs || []).some((label) => label.includes('Расход')),
+  `вкладка расхода осталась в нижней панели: ${JSON.stringify(empty.tabs)}`);
+
+console.log('шаг 1б: расход открывается из настроек');
+const usageEntry = await evaluate(`(async () => {
+  ${HELPERS}
+  document.querySelector('#sheetRoot .sheet-backdrop').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await wait(300);
+  location.hash = '#/settings';
+  await wait(600);
+  const button = byText('button.btn', 'Открыть расход');
+  await click(button);
+  await wait(700);
+  const text = document.getElementById('view').innerText;
+  const screen = /Калории|Расход|Прогноз|Баланс/.test(text);
+  const hash = location.hash;
+  // Возвращаемся к списку продуктов: дальше проверка продолжает работу с ним.
+  location.hash = '#/today';
+  await wait(600);
+  await click(document.getElementById('productsButton'));
+  await wait(400);
+  return JSON.stringify({ button: Boolean(button), hash, screen, back: root().innerText.includes('Мои продукты') });
+})()`);
+const usage = JSON.parse(usageEntry || '{}');
+console.log('   ', usageEntry);
+check(usage.button, 'в настройках нет входа в расход');
+check(usage.hash === '#/usage', `вход в расход ведёт не туда: ${usage.hash}`);
+check(usage.screen, 'экран расхода не показал ни журнала, ни прогноза');
+check(usage.back, 'список продуктов не открылся заново после проверки расхода');
 
 console.log('шаг 2: продукт добавляется вручную');
 const added = await evaluate(`(async () => {

@@ -6,6 +6,7 @@ import { h } from './util.js';
 import { BUILD_VERSION } from './version.js';
 import { alignWithServer } from './update.js';
 import { openChatSheet } from './ui/chat.js';
+import { openProductsSheet } from './ui/products.js';
 import * as calendar from './ui/calendar.js';
 import * as settings from './ui/settings.js';
 import * as today from './ui/today.js';
@@ -44,6 +45,12 @@ async function main() {
   document.getElementById('addButton').addEventListener('click', () => {
     if (currentPath() !== '/today') location.hash = '#/today';
     openChatSheet();
+  });
+
+  // Вкладка продуктов открывает окно списка, как кнопка добавления открывает окно разговора:
+  // маршрут у окна не заводится, и отдельного экрана у списка нет.
+  document.getElementById('productsButton').addEventListener('click', () => {
+    openProductsSheet();
   });
 
   window.addEventListener('hashchange', render);
