@@ -176,7 +176,8 @@ await evaluate(`(async () => {
 })()`);
 
 console.log('шаг 1: ответ модели подставляется, запрос наружу не уходит');
-const stubbed = await evaluate(`(() => {
+// Подмена ставится заново после каждой перезагрузки: перезагрузка стирает window.fetch.
+const INSTALL_STUB = `(() => {
   const answer = ${JSON.stringify(modelAnswer)};
   const estimate = ${JSON.stringify(estimateAnswer)};
   window.__modelCalls = 0;
@@ -197,10 +198,32 @@ const stubbed = await evaluate(`(() => {
       usage: { prompt_tokens: 1200, completion_tokens: 60 },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
+  window.__callsBefore = 0;
   return 'ok';
-})()`);
+})()`;
+const stubbed = await evaluate(INSTALL_STUB);
 check(stubbed === 'ok', 'подмена ответа модели не встала');
 requests.length = 0;
+
+// После перезагрузки остаётся один разбор, и ответ приходит оценкой с тем же названием.
+// Счётчик страницы начинается заново, поэтому подмена здесь вторая, простая.
+const INSTALL_STUB_SECOND = `(() => {
+  const estimate = ${JSON.stringify(estimateAnswer)};
+  window.__modelCalls = 0;
+  window.__prompts = [];
+  const real = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    const target = typeof input === 'string' ? input : input.url;
+    if (!String(target).includes('api.deepseek.com')) return real(input, init);
+    window.__modelCalls += 1;
+    window.__prompts.push(String(init.body || ''));
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: JSON.stringify(estimate) }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1200, completion_tokens: 60 },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  return 'ok';
+})()`;
 
 console.log('шаг 2: вход в разбор из списка продуктов');
 const entry = await evaluate(`(async () => {
@@ -292,10 +315,42 @@ const edited = await evaluate(`(() => {
 console.log('    после правки числа:', edited);
 check(/201/.test(edited), 'правка числа в карточке не отразилась на полосе продукта');
 
-console.log('шаг 6: карточка продукта на узких экранах');
+console.log('шаг 6: перезагрузка страницы посреди разбора');
+// Счётчики снимаем до перезагрузки: она стирает и подмену ответа, и счётчики страницы.
+const before = JSON.parse(await evaluate(
+  'JSON.stringify({ calls: window.__modelCalls, prompts: window.__prompts })',
+) || '{}');
+check(before.calls === 3, `до перезагрузки ушло ${before.calls} обращения вместо трёх`);
+
+await send('Page.reload', { ignoreCache: false });
+await wait(2500);
+// Подмена ставится заново: после перезагрузки window.fetch снова настоящий.
+await evaluate(INSTALL_STUB_SECOND);
+const reopened = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.getElementById('addButton'));
+  await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const inputs = [...document.querySelectorAll('#sheetRoot input')];
+  return JSON.stringify({
+    messages: document.querySelectorAll('#sheetRoot .msg').length,
+    name: inputs.find((input) => input.type === 'text')?.value || '',
+    kcal: inputs.filter((input) => input.type === 'number')[0]?.value || '',
+    bar: document.querySelector('#sheetRoot .draft-bar')?.innerText?.replace(/\\n/g, ' ') || '',
+  });
+})()`);
+const restored = JSON.parse(reopened || '{}');
+console.log('   ', reopened);
+check(restored.messages >= 2, 'после перезагрузки разбор не вернулся: переписки нет');
+check(restored.name === modelAnswer.name, 'после перезагрузки пропало название продукта');
+check(restored.kcal === '201', `после перезагрузки пропало поправленное число: ${restored.kcal}`);
+check(/разбор 0\.00025 \$/.test(restored.bar || ''), 'после перезагрузки пропала стоимость разбора');
+
+console.log('шаг 7: карточка продукта на узких экранах');
 for (const width of [320, 360, 390, 430]) {
-  // Перезагружать страницу нельзя: разбор живёт в памяти окна, и после перезагрузки
-  // проверять было бы нечего.
+  // Окно разбора уже открыто заново: перезагружать страницу здесь нельзя, иначе окно
+  // пришлось бы открывать ещё раз.
   await send('Emulation.setDeviceMetricsOverride', { width, height: 700, deviceScaleFactor: 2, mobile: true });
   await wait(400);
   const measured = JSON.parse(await evaluate(`(() => {
@@ -319,7 +374,7 @@ for (const width of [320, 360, 390, 430]) {
 await send('Emulation.clearDeviceMetricsOverride');
 await wait(300);
 
-console.log('шаг 7: сохранение уходит в список, а не в дневник');
+console.log('шаг 8: сохранение уходит в список, а не в дневник');
 await evaluate(`(async () => {
   ${HELPERS}
   await click(byText('#sheetRoot .btn-primary', 'В мои продукты'));
@@ -367,7 +422,7 @@ check(kept.entries === 0, `разбор упаковки записал что-�
 check(kept.thumbs === 0, 'снимок упаковки сохранён в хранилище');
 check((kept.usageKinds || []).includes('photo'), `разбор не попал в журнал как анализ фото: ${JSON.stringify(kept.usageKinds)}`);
 
-console.log('шаг 8: второй разбор без таблицы и с тем же названием');
+console.log('шаг 9: второй разбор без таблицы и с тем же названием');
 // Второй ответ приходит оценкой и с тем же названием: проверяем и подпись «это оценка»,
 // и то, что продукт с таким названием обновляется, а не заводится второй раз.
 await evaluate(`(async () => {
@@ -425,17 +480,86 @@ check(second.entries === 0, 'второй разбор записал что-т�
 check(JSON.parse(afterSecond || '{}').line?.includes('203'),
   'в списке не видно новых значений продукта');
 
-console.log('шаг 9: лишних запросов нет');
-const calls = await evaluate('window.__modelCalls');
-const prompts = await evaluate('JSON.stringify(window.__prompts)');
+console.log('шаг 10: закрытие окна заканчивает разбор, а перезагрузка его сохраняет');
+// Счётчики снимаем до последней перезагрузки: она обнуляет их вместе со страницей.
+const final = JSON.parse(await evaluate(
+  'JSON.stringify({ calls: window.__modelCalls, prompts: window.__prompts })',
+) || '{}');
+
+const afterSave = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const inputs = [...document.querySelectorAll('#sheetRoot input')];
+  const area = root().querySelector('textarea.composer-input');
+  return JSON.stringify({
+    messages: document.querySelectorAll('#sheetRoot .msg').length,
+    bar: document.querySelector('#sheetRoot .draft-bar')?.innerText?.replace(/\\n/g, ' ') || '',
+    name: inputs.find((input) => input.type === 'text')?.value || '',
+    typed: area ? area.value : null,
+  });
+})()`);
+const cleared = JSON.parse(afterSave || '{}');
+console.log('   ', afterSave);
+check(cleared.messages === 0, 'после сохранения продукта прежний разбор вернулся в окно');
+check(cleared.name === '' && cleared.bar === '', 'после сохранения осталась карточка прежнего продукта');
+
+// Набранные слова переживают перезагрузку страницы.
+await evaluate(`(async () => {
+  ${HELPERS}
+  const area = root().querySelector('textarea.composer-input');
+  area.value = 'творог пять процентов';
+  area.dispatchEvent(new Event('input', { bubbles: true }));
+  return 'ok';
+})()`);
+await send('Page.reload', { ignoreCache: false });
+await wait(2500);
+const typedBack = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.getElementById('addButton'));
+  await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const area = root().querySelector('textarea.composer-input');
+  return JSON.stringify({ typed: area ? area.value : null });
+})()`);
+const typed = JSON.parse(typedBack || '{}');
+console.log('   ', typedBack);
+check(typed.typed === 'творог пять процентов',
+  `набранные слова не пережили перезагрузку: ${JSON.stringify(typed.typed)}`);
+
+// Закрытие окна заканчивает разбор: следующий вход начинается с пустого окна.
+const closed = await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.querySelector('#sheetRoot .sheet-backdrop'));
+  await wait(400);
+  await click(document.getElementById('addButton'));
+  await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
+  await click(byText('#sheetRoot .btn', 'Снимок упаковки'));
+  await wait(400);
+  const area = root().querySelector('textarea.composer-input');
+  return JSON.stringify({
+    typed: area ? area.value : null,
+    messages: document.querySelectorAll('#sheetRoot .msg').length,
+  });
+})()`);
+const fresh = JSON.parse(closed || '{}');
+console.log('   ', closed);
+check(!fresh.typed, 'закрытое окно вернуло набранные слова');
+check(fresh.messages === 0, 'закрытое окно вернуло прежнюю переписку');
+
+console.log('шаг 11: лишних запросов нет');
+const calls = (before.calls || 0) + (final.calls || 0);
+const bodies = [...(before.prompts || []), ...(final.prompts || [])];
+const prompts = JSON.stringify(bodies);
 const modelCalls = requests.filter((request) => request.includes('api.deepseek.com'));
 // Снимок уходит в каждом запросе, включая повтор по кнопке: адрес данных должен быть
 // один, а не вложенный сам в себя.
-const images = JSON.parse(await evaluate(`JSON.stringify(window.__prompts.map((raw) => {
+const images = bodies.map((raw) => {
   const image = (JSON.parse(raw).messages?.[1]?.content || [])
     .find((part) => part.type === 'image_url')?.image_url?.url || '';
   return { hasImage: image.startsWith('data:image/'), markers: (image.match(/data:/g) || []).length };
-}))`) || '[]');
+});
 console.log('    снимок в запросах:', JSON.stringify(images));
 // Снимок в окне показывается адресом данных или ссылкой на blob, это не запрос наружу.
 const external = requests.filter((request) => !request.startsWith(url.split('#')[0])

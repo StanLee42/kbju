@@ -10,6 +10,9 @@
 import { createProvider, describeError, readProduct } from '../llm/index.js';
 import { nameProblem, per100Line, productFromParse, saveProduct } from '../products.js';
 import { store } from '../state.js';
+import {
+  clearProductParse, loadProductParse, loadProductTyped, saveProductParse, saveProductTyped,
+} from '../chat-session.js';
 import { DEFAULT_PRICES, logUsage, makeUsageRow } from '../usage.js';
 import { fill, h, num, round } from '../util.js';
 import { createComposer } from './components/composer.js';
@@ -24,21 +27,32 @@ export function openProductPhoto({ onSaved = null } = {}) {
   const providerConfig = settings.provider || {};
   const keyMissing = !providerConfig.key;
 
+  // Разбор возвращается после перезагрузки страницы: приложение перезагружает себя само,
+  // когда на устройство приходит новая сборка, и незавершённый разбор терять незачем.
+  const restored = loadProductParse();
   const state = {
-    messages: [], // { role, text, photo, answer, error }
-    draft: null, // последний разбор: уходит модели следующим сообщением
-    product: null, // текущая карточка: название и значения на 100 г
-    cost: 0,
+    messages: restored?.messages || [], // { role, text, photo, answer, error }
+    draft: restored?.draft || null, // последний разбор: уходит модели следующим сообщением
+    product: restored?.product || null, // текущая карточка: название и значения на 100 г
+    cost: restored?.cost || 0,
   };
 
   const thread = h('div', { class: 'thread' });
   const draftBar = h('div', { class: 'draft-bar', hidden: true });
   const host = h('div', {}, thread, draftBar);
-  const sheet = openSheet({ title: 'Продукт со снимка', content: host });
+  const sheet = openSheet({
+    title: 'Продукт со снимка',
+    content: host,
+    // Закрытие окна заканчивает разбор, каким бы способом его ни закрыли. Перезагрузка
+    // страницы окно не закрывает, поэтому разбор и возвращается после неё.
+    onClose: () => clearProductParse(),
+  });
 
   const input = createComposer({
     placeholder: 'Название продукта, если нужно',
     placeholderWithDraft: 'Поправьте словами, если нужно',
+    initialText: loadProductTyped(),
+    onTyped: (text) => saveProductTyped(text),
     keyWarning: keyMissing
       ? 'Ключ провайдера не заполнен: разобрать не получится. Заполните ключ в настройках.'
       : null,
@@ -74,6 +88,12 @@ export function openProductPhoto({ onSaved = null } = {}) {
    * на сообщение, поэтому набор с клавиатуры не сбрасывает ни фокус, ни курсор.
    */
   function productCard(answer) {
+    /** Правка числа или названия: записываем сразу, иначе перезагрузка съела бы правку. */
+    const edited = () => {
+      renderDraftBar();
+      persist();
+    };
+
     const field = (key) => h('label', { class: 'field field-compact', style: 'margin:0' },
       h('span', { class: 'field-label', text: VALUE_LABELS[key] }),
       h('input', {
@@ -81,7 +101,7 @@ export function openProductPhoto({ onSaved = null } = {}) {
         value: round(state.product.per100[key], 1),
         oninput: (event) => {
           state.product.per100[key] = num(event.target.value);
-          renderDraftBar();
+          edited();
         },
       }));
 
@@ -95,7 +115,7 @@ export function openProductPhoto({ onSaved = null } = {}) {
           autocapitalize: 'sentences',
           oninput: (event) => {
             state.product.name = event.target.value;
-            renderDraftBar();
+            edited();
           },
         })),
       h('div', { class: 'tiny faint', style: 'margin:12px 0 6px' }, 'Значения на 100 г'),
@@ -184,6 +204,20 @@ export function openProductPhoto({ onSaved = null } = {}) {
     renderDraftBar();
     input.setHasDraft(Boolean(state.product));
     thread.scrollTop = thread.scrollHeight;
+    persist();
+  }
+
+  /**
+   * Кладёт разбор в хранилище. Перезагрузка страницы приходит сама вместе с новой сборкой,
+   * и разбор должен пережить её целиком.
+   */
+  function persist() {
+    saveProductParse({
+      messages: state.messages,
+      product: state.product,
+      draft: state.draft,
+      cost: state.cost,
+    });
   }
 
   // --- шаги ---
