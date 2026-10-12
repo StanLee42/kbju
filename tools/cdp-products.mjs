@@ -199,7 +199,44 @@ console.log('    запросов всего:', requests.length, '· к моде
 check(modelCalls.length === 0, `ушёл запрос к модели: ${modelCalls.join(', ')}`);
 check(external.length === 0, `ушли посторонние запросы: ${external.join(', ')}`);
 
-console.log('шаг 7: вёрстка списка и формы на узких экранах');
+console.log('шаг 7: продукт добавляется к разбору в окне разговора');
+const draft = JSON.parse(await evaluate(`(async () => {
+  ${HELPERS}
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const date = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+  const items = [{ name: 'Салат', grams: 100, kcal: 50, protein: 2, fat: 3, carbs: 4 }];
+  const analysis = { dish: 'Салат', items, cost: 0.001, source: 'estimate',
+    confidence: 'medium', assumptions: '', basis: 'per_portion' };
+  const session = await import('/js/chat-session.js');
+  session.saveChat({ date, messages: [{ role: 'assistant', analysis }], draft: analysis,
+    current: { items, totals: { grams: 100, kcal: 50, protein: 2, fat: 3, carbs: 4 } }, cost: 0.001 });
+
+  await click(document.getElementById('addButton'));
+  const before = root().querySelector('.draft-bar')?.innerText.replace(/\\n+/g, ' ') || '';
+  await click(byText('#sheetRoot .btn', 'Из моих продуктов'));
+  await click(root().querySelector('.product-main'));
+  type(root().querySelector('input[type="number"]'), '200');
+  await wait(150);
+  await click(byText('#sheetRoot button', 'В разбор'));
+  await wait(350);
+
+  return JSON.stringify({
+    before,
+    after: root().querySelector('.draft-bar')?.innerText.replace(/\\n+/g, ' ') || '',
+    positions: root().querySelectorAll('.field-compact input[type="text"]').length,
+    title: root().querySelector('.sheet-title')?.textContent || '',
+    kept: Boolean(session.loadChat({ date })?.draft?.items?.length),
+  });
+})()`) || '{}');
+console.log('   ', JSON.stringify(draft));
+check(draft.title === 'Добавить еду', 'после добавления в разбор окно разговора не вернулось');
+check(draft.positions === 2, 'в разборе не стало на одну позицию больше');
+check(/300 г/.test(draft.after || ''), 'полоса черновика не сложила вес');
+check(draft.after !== draft.before, 'разбор не изменился после добавления продукта');
+check(draft.kept, 'разговор не сохранился после возврата к разбору');
+
+console.log('шаг 8: вёрстка списка и формы на узких экранах');
 for (const width of [320, 360, 390, 430]) {
   await send('Emulation.setDeviceMetricsOverride', { width, height: 700, deviceScaleFactor: 2, mobile: true });
   await send('Page.reload', { ignoreCache: true });
