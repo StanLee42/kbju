@@ -63,6 +63,16 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Цены провайдера' }),
       pricesHost),
+    // Расход живёт отдельным экраном, а вход в него отсюда: в нижней панели вместо расхода
+    // стоит список продуктов.
+    h('section', { class: 'card' },
+      h('h2', { class: 'card-title', text: 'Расход' }),
+      h('p', { class: 'small faint', style: 'margin:0 0 10px' },
+        'Журнал запросов к модели, прогноз на месяц, бюджет и остаток на счету провайдера.'),
+      h('button', {
+        class: 'btn', type: 'button', text: 'Открыть расход',
+        onclick: () => { location.hash = '#/usage'; },
+      })),
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Хранилище' }),
       storageHost),
