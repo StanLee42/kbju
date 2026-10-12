@@ -198,7 +198,9 @@ export function openNormsChat({ onApplied = null } = {}) {
 
   /** Повторяет неудачный запрос: то же сообщение человека и тот же разбор до него. */
   async function retry(index) {
-    const before = history().slice(0, index);
+    // Слова человека уходят новым сообщением, поэтому в прежний разговор они не входят:
+    // иначе они стояли бы в запросе дважды.
+    const before = history().slice(0, Math.max(0, index - 1));
     // Снимок отчёта лежит в сообщении человека: из сообщения об ошибке его взять негде.
     const message = state.messages[index - 1];
     state.messages.splice(index, 1);

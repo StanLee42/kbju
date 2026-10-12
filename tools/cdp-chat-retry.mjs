@@ -170,9 +170,11 @@ const stubbed = await evaluate(`(() => {
     const kind = body.includes('помогаешь настроить нормы') ? 'norms' : 'chat';
     window.__calls[kind] += 1;
     window.__prompts[kind].push(body);
-    // Две первые попытки приходят не по схеме: слой провайдеров повторяет сам, и только
-    // после второй неудачи ошибку видит человек, а повтор запускает он.
-    const content = window.__calls[kind] <= 2 ? 'извините, не могу' : JSON.stringify(kind === 'norms' ? norms : food);
+    // Удачна каждая третья попытка: две подряд приходят не по схеме, поэтому человек видит
+    // ошибку и повторяет сам. Кругов в разговоре два, и счёт идёт по трём попыткам на круг.
+    const content = window.__calls[kind] % 3 === 0
+      ? JSON.stringify(kind === 'norms' ? norms : food)
+      : 'извините, не могу';
     return new Response(JSON.stringify({
       choices: [{ message: { content }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 900, completion_tokens: 40 },
@@ -183,7 +185,50 @@ const stubbed = await evaluate(`(() => {
 check(stubbed === 'ok', 'подмена ответа модели не встала');
 requests.length = 0;
 
-console.log('шаг 2: повтор в разговоре о еде');
+console.log('шаг 2: повтор в разговоре о еде без снимка');
+await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.getElementById('addButton'));
+  type(root().querySelector('textarea.composer-input'), 'тарелка борща');
+  await click(byText('#sheetRoot .btn-primary', 'Отправить'));
+  return 'ok';
+})()`);
+await waitFor(`(() => {
+  const button = [...document.querySelectorAll('#sheetRoot .btn')]
+    .find((node) => node.textContent.trim() === 'Повторить');
+  return button ? 'есть' : null;
+})()`, { label: 'ошибка разбора словами' });
+await evaluate(`(async () => {
+  ${HELPERS}
+  await click(byText('#sheetRoot .btn', 'Повторить'));
+  return 'ok';
+})()`);
+await waitFor(`(() => {
+  const bar = document.querySelector('#sheetRoot .draft-bar');
+  return bar && !bar.hidden ? 'готово' : null;
+})()`, { label: 'разбор словами после повтора' });
+
+const words = JSON.parse(await evaluate(`JSON.stringify({
+  calls: window.__calls.chat,
+  last: (window.__prompts.chat[window.__prompts.chat.length - 1] || ''),
+})`) || '{}');
+const wordsImage = (JSON.parse(words.last || '{}').messages?.[1]?.content || [])
+  .find((part) => part.type === 'image_url');
+const wordsCount = (words.last.match(/тарелка борща/g) || []).length;
+console.log('    повторных запросов:', words.calls, '· снимок:', Boolean(wordsImage), '· слова встречаются:', wordsCount);
+check(words.calls === 3, `разговор обратился к модели ${words.calls} раза вместо трёх`);
+check(!wordsImage, 'повтор словами ушёл со снимком');
+check(wordsCount === 1, `слова человека стоят в запросе ${wordsCount} раза вместо одного`);
+
+// Круг со снимком начинается с чистого окна: закрытие окна заканчивает разговор.
+await evaluate(`(async () => {
+  ${HELPERS}
+  await click(document.querySelector('#sheetRoot .sheet-backdrop'));
+  await wait(300);
+  return 'ok';
+})()`);
+
+console.log('шаг 3: повтор в разговоре о еде со снимком');
 await evaluate(`(async () => {
   ${HELPERS}
   await click(document.getElementById('addButton'));
@@ -235,12 +280,12 @@ const chat = JSON.parse(chatCalls || '{}');
 const chatImage = (JSON.parse(chat.last || '{}').messages?.[1]?.content || [])
   .find((part) => part.type === 'image_url')?.image_url?.url || '';
 console.log('    повторных запросов к модели:', chat.calls, '· снимок в последнем:', chatImage.slice(0, 22));
-check(chat.calls === 3, `разговор обратился к модели ${chat.calls} раза вместо трёх`);
+check(chat.calls === 6, `разговор обратился к модели ${chat.calls} раза вместо шести: два круга по три попытки`);
 check(chatImage.startsWith('data:image/'), 'повтор ушёл без снимка');
 check((chatImage.match(/data:/g) || []).length === 1, 'снимок в повторе собран неверно');
 check(chat.last.includes('это творог'), 'повтор ушёл без слов человека');
 
-console.log('шаг 3: повтор в разговоре о нормах');
+console.log('шаг 4: повтор в разговоре о нормах');
 await evaluate(`(async () => {
   ${HELPERS}
   await click(document.querySelector('#sheetRoot .sheet-backdrop'));
@@ -283,7 +328,7 @@ console.log('    повторных запросов к модели:', norms.ca
 check(norms.calls === 3, `разговор о нормах обратился к модели ${norms.calls} раза вместо трёх`);
 check(normsImage.startsWith('data:image/'), 'повтор разбора отчёта ушёл без снимка');
 
-console.log('шаг 4: лишних запросов нет');
+console.log('шаг 5: лишних запросов нет');
 const modelCalls = requests.filter((request) => request.includes('api.deepseek.com'));
 const external = requests.filter((request) => !request.startsWith(url.split('#')[0])
   && !request.startsWith('data:') && !request.startsWith('blob:'));

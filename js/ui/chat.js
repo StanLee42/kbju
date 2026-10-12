@@ -236,7 +236,9 @@ export function openChatSheet({ date = null } = {}) {
 
   /** Повторяет неудачный запрос: то же сообщение человека и тот же разговор до него. */
   async function retry(index) {
-    const before = history().slice(0, index);
+    // Слова человека уходят новым сообщением, поэтому в прежний разговор они не входят:
+    // иначе они стояли бы в запросе дважды.
+    const before = history().slice(0, Math.max(0, index - 1));
     // Снимок и слова лежат в сообщении человека, а не в сообщении об ошибке: из ошибки
     // их взять негде, и повтор уходил пустым.
     const message = state.messages[index - 1];
