@@ -8,6 +8,7 @@
 // на килограмм, добавку на тренировку), приложение пересчитывает нормы и показывает расчёт
 // по шагам. Так в споре видно, что именно сдвинулось.
 import { createProvider, describeError, discussNorms } from '../llm/index.js';
+import { imageFromDataUrl } from '../media/image.js';
 import { NORM_DEFAULTS, normsFromMeasurement } from '../norm.js';
 import * as db from '../db.js';
 import { saveSettings, store } from '../state.js';
@@ -195,15 +196,16 @@ export function openNormsChat({ onApplied = null } = {}) {
     }));
   }
 
+  /** Повторяет неудачный запрос: то же сообщение человека и тот же разбор до него. */
   async function retry(index) {
-    const failed = state.messages[index];
     const before = history().slice(0, index);
+    // Снимок отчёта лежит в сообщении человека: из сообщения об ошибке его взять негде.
     const message = state.messages[index - 1];
     state.messages.splice(index, 1);
     render();
     await ask({
       text: message?.text || '',
-      photo: failed.photo ? { dataUrl: failed.photo } : null,
+      photo: message?.photo ? imageFromDataUrl(message.photo) : null,
       history: before,
     });
   }
@@ -218,13 +220,8 @@ export function openNormsChat({ onApplied = null } = {}) {
     });
     const prices = settings.prices || DEFAULT_PRICES;
 
-    // Снимок приходит как адрес данных: разбираем его на части для запроса.
-    const image = photo?.dataUrl
-      ? (() => {
-        const [head, body] = String(photo.dataUrl).split(',');
-        return { base64: body, mime: (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' };
-      })()
-      : (photo ? { base64: photo.base64, mime: photo.mime } : null);
+    // Снимок приходит готовыми частями: и от поля ввода, и от повтора запроса.
+    const image = photo ? { base64: photo.base64, mime: photo.mime } : null;
 
     let result;
     try {

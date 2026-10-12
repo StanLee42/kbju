@@ -111,3 +111,24 @@ export async function makeThumbnail(file, { maxSide = 512, quality = 0.72 } = {}
 export function blobToObjectUrl(blob) {
   return blob ? URL.createObjectURL(blob) : null;
 }
+
+/**
+ * Разбирает адрес данных снимка на части для запроса к провайдеру.
+ *
+ * В переписке снимок лежит строкой вида `data:image/jpeg;base64,...`: так его показывает
+ * разметка. Для запроса нужны части по отдельности. Функция чистая, поэтому её проверяет
+ * node --test без браузера.
+ *
+ * @returns {{base64: string, mime: string} | null} null, если данных в адресе нет
+ */
+export function imageFromDataUrl(dataUrl) {
+  const raw = String(dataUrl || '');
+  const comma = raw.indexOf(',');
+  if (comma === -1) return null;
+
+  const body = raw.slice(comma + 1);
+  if (!body) return null;
+
+  const mime = (raw.slice(0, comma).match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  return { base64: body, mime };
+}
