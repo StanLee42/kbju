@@ -72,7 +72,7 @@ async function runWithRetry({ provider, system, user, image, text, parse }) {
       // Не битый ответ, а нехватка бюджета на размышления: поднимаем лимит и повторяем.
       maxTokens = MAX_OUTPUT_TOKENS_RETRY;
       lastError = {
-        ...formatError('finish_reason: length — модель не успела выдать ответ'),
+        ...formatError('finish_reason: length, модель не успела выдать ответ'),
         hint: 'Лимит вывода увеличен, повторяем запрос.',
       };
       continue;
@@ -98,7 +98,7 @@ export async function analyzeFood({ provider, image = null, text = null }) {
 /**
  * Разбор сообщения в разговоре про еду: словами, снимком или тем и другим.
  *
- * `history` — прежние сообщения разговора, `draft` — текущий разбор. Оба уходят модели:
+ * `history`: прежние сообщения разговора, `draft`: текущий разбор. Оба уходят модели:
  * без истории она спрашивала бы одно и то же по кругу, а без разбора не поняла бы,
  * к чему относится уточнение «это половина».
  */
@@ -133,7 +133,7 @@ export async function analyzeChat({ provider, text = null, image = null, draft =
 /**
  * Разговор о нормах: человек обсуждает калории и БЖУ, модель меняет рычаги.
  *
- * Числа считает приложение по этим рычагам — модель их не считает и не называет.
+ * Числа считает приложение по этим рычагам: модель их не считает и не называет.
  */
 export async function discussNorms({ provider, text = null, image = null, current = null, history = [] }) {
   const parts = [];
