@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 
 import {
   entryFromProduct, forWeight, itemFromProduct, matchByName, nameProblem, orderProducts,
-  per100g, productPatch, searchProducts,
+  per100g, per100FromLabel, per100Line, productFromParse, productPatch, searchProducts,
 } from '../js/products.js';
 
 const close = (actual, expected, message) => {
@@ -187,4 +187,57 @@ test('запись из продукта не зовёт модель и не п
 
   assert.equal(/llm|logUsage|usage\.js/.test(source), false,
     'в пути записи из продукта нет ни модели, ни журнала расхода');
+});
+
+test('значения таблицы пересчитываются на 100 г по граммовке', () => {
+  const per100 = per100FromLabel({ kcal: 60, protein: 3, fat: 2, carbs: 6 }, 30);
+  close(per100.kcal, 200, '60 ккал на порцию 30 г дают 200 ккал на 100 г');
+  close(per100.protein, 10);
+  close(per100.fat, 6.7);
+  close(per100.carbs, 20);
+});
+
+test('таблица на 100 г переносится без пересчёта', () => {
+  const per100 = per100FromLabel({ kcal: 121, protein: 17, fat: 5, carbs: 3 }, 100);
+  close(per100.kcal, 121);
+  close(per100.protein, 17);
+  close(per100.carbs, 3);
+});
+
+test('граммовка без числа не делит на ноль', () => {
+  for (const basis of [0, -5, null, undefined, '', 'abc']) {
+    const per100 = per100FromLabel({ kcal: 250, protein: 10 }, basis);
+    close(per100.kcal, 250, `граммовка «${basis}» оставляет значения как есть`);
+    close(per100.protein, 10);
+  }
+});
+
+test('пустая таблица даёт нули', () => {
+  const per100 = per100FromLabel({}, 30);
+  close(per100.kcal, 0);
+  close(per100.carbs, 0);
+});
+
+test('ответ модели сводится к продукту со значениями на 100 г', () => {
+  const product = productFromParse({
+    name: '  Творог 5%  ',
+    values: { kcal: 60, protein: 9, fat: 2.5, carbs: 2 },
+    basisGrams: 30,
+  });
+
+  assert.equal(product.name, 'Творог 5%', 'название обрезается по краям');
+  close(product.per100.kcal, 200);
+  close(product.per100.fat, 8.3);
+  close(product.per100.protein, 30);
+});
+
+test('разбор без граммовки сводится к продукту как есть', () => {
+  const product = productFromParse({ name: 'Хлопья', values: { kcal: 350, protein: 12 } });
+  close(product.per100.kcal, 350);
+  close(product.per100.carbs, 0);
+});
+
+test('строка продукта называет граммовку, к которой отнесены числа', () => {
+  assert.equal(per100Line({ kcal: 140, protein: 7, fat: 4, carbs: 10 }),
+    '140 ккал · Б 7 · Ж 4 · У 10 на 100 г');
 });

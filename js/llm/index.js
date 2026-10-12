@@ -4,12 +4,13 @@
 // Никаких «HTTP 402» в интерфейс не попадает.
 import { createDeepSeek } from './deepseek.js';
 import { KINDS, describeError, normalizeThrown, providerError } from './errors.js';
-import { parseAnalysis, parseImpedance, parseNorms } from './parse.js';
+import { parseAnalysis, parseImpedance, parseNorms, parseProduct } from './parse.js';
 import {
   CHAT_SYSTEM_PROMPT, CHAT_USER_PROMPT,
   NORMS_SYSTEM_PROMPT,
   IMPEDANCE_SYSTEM_PROMPT, IMPEDANCE_USER_PROMPT,
   MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS_RETRY,
+  PRODUCT_SYSTEM_PROMPT, PRODUCT_USER_PROMPT,
   SYSTEM_PROMPT, USER_PROMPT,
 } from './prompt.js';
 
@@ -152,6 +153,35 @@ export async function discussNorms({ provider, text = null, image = null, curren
     image,
     text: parts.join('\n\n'),
     parse: parseNorms,
+  });
+}
+
+/**
+ * Разбор снимка упаковки ради продукта: название и значения вместе с граммовкой таблицы.
+ *
+ * В дневник еды этот разбор не идёт, из него собирается продукт в списке. `draft` и `history`
+ * работают так же, как в разговоре о еде: уточнение меняет уже прочитанное, а не заводит
+ * второй продукт.
+ */
+export async function readProduct({ provider, text = null, image = null, draft = null, history = [] }) {
+  const parts = [];
+
+  if (draft) {
+    parts.push(`Что уже прочитано с этой упаковки (JSON):\n${JSON.stringify(draft)}`);
+  }
+  const transcript = (history || [])
+    .map((message) => `${message.role === 'user' ? 'Человек' : 'Ты'}: ${String(message.text || '').trim() || 'прислал снимок'}`)
+    .join('\n');
+  if (transcript) parts.push(`Разговор до этого:\n${transcript}`);
+  parts.push(`Новое сообщение человека: ${text || '(только снимок, без слов)'}`);
+
+  return runWithRetry({
+    provider,
+    system: PRODUCT_SYSTEM_PROMPT,
+    user: PRODUCT_USER_PROMPT,
+    image,
+    text: parts.join('\n\n'),
+    parse: parseProduct,
   });
 }
 

@@ -36,6 +36,33 @@ export function per100g(items = []) {
   return out;
 }
 
+/**
+ * Значения с таблицы на упаковке, приведённые к 100 г.
+ *
+ * Модель называет граммовку, к которой относятся прочитанные числа: 100 у таблицы на 100 г,
+ * вес порции у таблицы на порцию, вес упаковки у значений на всю упаковку. Пересчёт делается
+ * здесь, а не моделью: это арифметика, и её результат не должен зависеть от ответа модели.
+ * Граммовка без числа оставляет значения как есть: делить на ноль нельзя, а таблица на 100 г
+ * встречается чаще остальных.
+ */
+export function per100FromLabel(source = {}, basisGrams = 100) {
+  const per100 = values(source);
+  const basis = Number(basisGrams);
+  if (!(basis > 0) || basis === 100) return per100;
+
+  const out = {};
+  for (const key of VALUES) out[key] = round1((per100[key] / basis) * 100);
+  return out;
+}
+
+/** Продукт из разбора упаковки: название как есть и значения, приведённые к 100 г. */
+export function productFromParse(data = {}) {
+  return {
+    name: String(data.name || '').trim(),
+    per100: per100FromLabel(data.values || data, data.basisGrams),
+  };
+}
+
 /** КБЖУ на вес порции: значения на 100 г, умноженные на вес. */
 export function forWeight(per100 = {}, grams = 0) {
   const weight = Number(grams) || 0;
@@ -47,6 +74,13 @@ export function forWeight(per100 = {}, grams = 0) {
 /** Проверка названия: без названия продукт не сохраняется. */
 export function nameProblem(name) {
   return String(name || '').trim() ? null : 'Название не заполнено';
+}
+
+/** Строка значений продукта: «140 ккал · Б 7 · Ж 4 · У 10 на 100 г». */
+export function per100Line(per100 = {}) {
+  const value = (key) => String(round1(per100?.[key]));
+  return `${value('kcal')} ккал · Б ${value('protein')} · Ж ${value('fat')}`
+    + ` · У ${value('carbs')} на 100 г`;
 }
 
 const nameKey = (name) => String(name || '').trim().toLowerCase();

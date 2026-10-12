@@ -142,6 +142,87 @@ export function parseAnalysis(text) {
   };
 }
 
+/** Четыре значения продукта: пустое поле становится нулём, минус отсекается. */
+const PRODUCT_VALUES = ['kcal', 'protein', 'fat', 'carbs'];
+
+/**
+ * Разбор ответа по снимку упаковки: название продукта и значения вместе с граммовкой, к которой
+ * они относятся. Приведение к 100 г делает приложение: здесь важно не потерять граммовку.
+ *
+ * Пустые числа допустимы (у воды их нет), а вот ответ без чисел и без вопроса это не разбор,
+ * а ошибка: сохранять в список нечего.
+ */
+export function parseProduct(text) {
+  const parsed = extractJson(text);
+  if (!parsed || typeof parsed !== 'object') {
+    return { ok: false, error: 'ответ не является JSON' };
+  }
+
+  const warnings = [];
+  const question = String(parsed.question || '').trim() || null;
+  const name = String(parsed.name || '').trim();
+
+  const values = {};
+  let hasNumbers = false;
+  for (const key of PRODUCT_VALUES) {
+    const value = num(parsed[key], NaN);
+    if (Number.isFinite(value)) hasNumbers = true;
+    values[key] = Math.max(0, Number.isFinite(value) ? value : 0);
+  }
+
+  if (!hasNumbers) {
+    // Вопрос без чисел это ответ, а не ошибка ответа модели: считать пока нечего.
+    if (question) {
+      return {
+        ok: true,
+        data: {
+          name,
+          values,
+          hasNumbers: false,
+          source: SOURCES.has(parsed.source) ? parsed.source : 'estimate',
+          basisGrams: 100,
+          packageWeight: null,
+          question,
+          confidence: CONFIDENCE.has(parsed.confidence) ? parsed.confidence : 'low',
+          assumptions: String(parsed.assumptions || '').trim(),
+          warnings,
+        },
+      };
+    }
+    return { ok: false, error: 'в ответе нет ни значений продукта, ни вопроса' };
+  }
+
+  // Граммовка нужна для пересчёта на 100 г. Не пришла: считаем значения отнесёнными к 100 г,
+  // потому что таблица на 100 г встречается чаще остальных, и говорим об этом вслух.
+  const rawBasis = num(parsed.basisGrams, NaN);
+  const basisGrams = Number.isFinite(rawBasis) && rawBasis > 0 ? rawBasis : 100;
+  if (!(Number.isFinite(rawBasis) && rawBasis > 0)) {
+    warnings.push('граммовка таблицы не указана, значения считаем отнесёнными к 100 г');
+  }
+
+  const source = SOURCES.has(parsed.source) ? parsed.source : 'estimate';
+  if (!SOURCES.has(parsed.source)) warnings.push('источник не указан, считаем оценкой');
+  if (!name) warnings.push('название продукта не указано, его нужно заполнить вручную');
+
+  return {
+    ok: true,
+    data: {
+      name,
+      values,
+      hasNumbers: true,
+      source,
+      basisGrams,
+      packageWeight: parsed.packageWeight === null || parsed.packageWeight === undefined
+        ? null
+        : num(parsed.packageWeight) || null,
+      question,
+      confidence: CONFIDENCE.has(parsed.confidence) ? parsed.confidence : 'low',
+      assumptions: String(parsed.assumptions || '').trim(),
+      warnings,
+    },
+  };
+}
+
 /** Разбор отчёта биоимпеданса: набор измерений, без позиций. */
 export function parseImpedance(text) {
   const parsed = extractJson(text);
