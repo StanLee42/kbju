@@ -140,7 +140,7 @@ export function openProductPhoto({ onSaved = null } = {}) {
     // Числа прежнего разбора могли остаться без карточки: показываем их строкой, как они
     // напечатаны на упаковке, вместе с граммовкой таблицы.
     const line = answer.hasNumbers
-      ? `${answer.name || 'Без названия'} — ${round(answer.values.kcal)} ккал · Б ${round(answer.values.protein)}`
+      ? `${answer.name || 'Без названия'} - ${round(answer.values.kcal)} ккал · Б ${round(answer.values.protein)}`
         + ` · Ж ${round(answer.values.fat)} · У ${round(answer.values.carbs)} на ${round(answer.basisGrams)} г`
       : null;
     return question || line
