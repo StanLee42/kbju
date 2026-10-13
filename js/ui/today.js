@@ -4,7 +4,7 @@ import { fill, formatDateHuman, formatTime, h, plural, round, todayISO, weekdayF
 import { createBar } from './components/bar.js';
 import { toast } from './components/sheet.js';
 import { addEntry, deleteEntry, loadDay, store, setDayTypeOverride, subscribe } from '../state.js';
-import { mergeEntries } from '../merge.js';
+import { entryParts, mergeEntries } from '../merge.js';
 import { openAddSheet } from './add.js';
 import { openEntryDetails } from './result-card.js';
 
@@ -167,7 +167,9 @@ export function mount(container) {
           renderFeed();
           return;
         }
-        if (['photo', 'chat', 'merged'].includes(entry.source) && entry.items?.length) openEntryDetails(entry);
+        // Окно разбора показывают там, где есть что показать: объединённая запись годится
+        // и без позиций, потому что помнит строки, из которых собрана.
+        if (['photo', 'chat', 'merged'].includes(entry.source) && entryParts(entry).length) openEntryDetails(entry);
         else openAddSheet({ entry });
       };
       return h('div', {

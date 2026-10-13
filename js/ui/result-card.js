@@ -5,9 +5,9 @@
 // а расхождение между разговором и снимком в дневнике выглядело бы как ошибка.
 import { sumItems } from '../portion.js';
 import { per100g, saveProduct } from '../products.js';
-import { fill, h, num, round } from '../util.js';
+import { fill, h, num, plural, round } from '../util.js';
 import { addEntry, deleteEntry, loadThumb } from '../state.js';
-import { splitEntry } from '../merge.js';
+import { canSplit, entryParts, splitEntry } from '../merge.js';
 import { openSheet, toast } from './components/sheet.js';
 
 const CONFIDENCE_LABEL = { high: 'уверенно', medium: 'примерно', low: 'неуверенно' };
@@ -165,12 +165,13 @@ export function createResultCard({
 }
 
 /**
- * Показывает уже сохранённую запись: позиции и то, что модель учла, и даёт её удалить.
- * Снимок показывается, если он был: у записи из слов его нет.
+ * Показывает уже сохранённую запись: её составляющие и то, что модель учла, и даёт её удалить.
+ * Составляющими объединённой записи служат строки, из которых она собрана, а у остальных
+ * записей это позиции разбора. Снимок показывается, если он был: у записи из слов его нет.
  */
 export async function openEntryDetails(entry) {
   const thumb = entry.thumbId ? await loadThumb(entry.thumbId).catch(() => null) : null;
-  const items = entry.items || [];
+  const parts = entryParts(entry);
   const url = thumb ? URL.createObjectURL(thumb) : null;
 
   const content = h('div', {},
@@ -181,13 +182,13 @@ export async function openEntryDetails(entry) {
         style: 'width:100%;border-radius:12px;margin-bottom:12px;max-height:240px;object-fit:cover',
       })
       : null,
-    items.length
-      ? h('div', {}, items.map((item) => h('div', {
+    parts.length
+      ? h('div', {}, parts.map((part) => h('div', {
         style: 'padding:8px 0;border-bottom:1px solid var(--line)',
       },
-      h('div', { class: 'small' }, `${item.name}: ${round(item.grams)} г`),
+      h('div', { class: 'small' }, `${part.name}: ${round(part.grams)} г`),
       h('div', { class: 'tiny faint' },
-        `${round(item.kcal)} ккал · Б ${round(item.protein)} · Ж ${round(item.fat)} · У ${round(item.carbs)}`))))
+        `${round(part.kcal)} ккал · Б ${round(part.protein)} · Ж ${round(part.fat)} · У ${round(part.carbs)}`))))
       : h('p', { class: 'small muted' }, 'Позиции не сохранились, есть только итог.'),
     entry.assumptions
       ? h('p', { class: 'tiny faint', style: 'margin-top:10px' }, `Что учтено: ${entry.assumptions}`)
@@ -196,21 +197,22 @@ export async function openEntryDetails(entry) {
       ? h('p', { class: 'tiny faint' }, `Уверенность модели: ${CONFIDENCE_LABEL[entry.confidence] || entry.confidence}`)
       : null);
 
-  // Разбор на составляющие: приём пищи распадается на отдельные позиции. Нужно, чтобы
-  // посмотреть, какая именно позиция тянет день в перебор.
+  // Разбор на составляющие: приём пищи распадается на отдельные записи. У объединённой записи
+  // это отмена объединения, поэтому она разбирается и без позиций. Нужно, чтобы посмотреть,
+  // какая именно позиция тянет день в перебор.
   const actions = [];
-  if (items.length >= 2) {
+  if (canSplit(entry)) {
     actions.push(h('button', {
       class: 'btn btn-small', type: 'button', text: 'Разделить на составляющие',
       onclick: async () => {
-        const parts = splitEntry(entry);
-        if (!parts.length) {
+        const split = splitEntry(entry);
+        if (!split.length) {
           toast('Разделять нечего');
           return;
         }
         await deleteEntry(entry.id);
-        for (const part of parts) await addEntry(part);
-        toast(`Разделено на ${parts.length} позиции`);
+        for (const part of split) await addEntry(part);
+        toast(`Разделено на ${split.length} ${plural(split.length, 'позицию', 'позиции', 'позиций')}`);
         sheet.close();
       },
     }));
