@@ -29,7 +29,7 @@ export function mount(container) {
   const calculatorCard = h('section', { class: 'card' });
   const budgetCard = h('section', { class: 'card' });
   const balanceCard = h('section', { class: 'card' });
-  const pricesNote = h('p', { class: 'tiny faint' });
+  const pricesCard = h('section', { class: 'card' });
 
   container.append(
     h('h1', { text: 'Расход', style: 'margin-bottom:12px' }),
@@ -39,7 +39,7 @@ export function mount(container) {
     calculatorCard,
     budgetCard,
     balanceCard,
-    pricesNote,
+    pricesCard,
   );
 
   function sinceFor(id) {
@@ -225,13 +225,64 @@ export function mount(container) {
     fill(balanceCard, ...parts);
   }
 
+  /**
+   * Цены провайдера: таблица переехала сюда из настроек. Здесь её и правят: рядом видно,
+   * во что обходится общение, и дата таблицы стоит в той же карточке.
+   */
   function renderPrices() {
     const prices = store.settings?.prices || DEFAULT_PRICES;
-    const table = prices.perModel?.[store.settings?.provider?.model] || prices.perModel?.['deepseek-flash'];
-    pricesNote.textContent = table
-      ? `Цены на ${prices.asOf}: вход ${table.inputCacheMiss} / из кэша ${table.inputCacheHit} / выход `
-        + `${table.output} за миллион токенов. Суммы это оценка, а не факт: тарифы меняются.`
-      : '';
+    const model = store.settings?.provider?.model || 'deepseek-flash';
+    const table = { ...(prices.perModel?.[model] || DEFAULT_PRICES.perModel['deepseek-flash']) };
+
+    const patch = (key, value) => saveSettings({
+      prices: {
+        ...DEFAULT_PRICES,
+        ...prices,
+        perModel: { ...(prices.perModel || {}), [model]: { ...table, [key]: value } },
+      },
+    });
+
+    const field = (key, label) => h('label', { class: 'field', style: 'margin:0' },
+      h('span', { class: 'field-label', text: label }),
+      h('input', {
+        type: 'number', inputmode: 'decimal', value: table[key],
+        onchange: (event) => {
+          patch(key, Number(event.target.value) || 0);
+          renderPrices();
+        },
+      }));
+
+    fill(pricesCard,
+      h('h2', { class: 'card-title', text: 'Цены провайдера' }),
+      h('p', { class: 'tiny faint', style: 'margin:0 0 10px' },
+        `Цены на ${prices.asOf || DEFAULT_PRICES.asOf}: вход ${table.inputCacheMiss} / из кэша `
+        + `${table.inputCacheHit} / выход ${table.output} за миллион токенов. Суммы это оценка, `
+        + 'а не факт: тарифы меняются.'),
+      h('div', { class: 'grid-2' },
+        field('inputCacheMiss', 'Вход, промах'),
+        field('inputCacheHit', 'Вход, кэш')),
+      h('div', { class: 'grid-2', style: 'margin-top:8px' },
+        field('output', 'Выход'),
+        h('label', { class: 'field', style: 'margin:0' },
+          h('span', { class: 'field-label', text: 'Цены на дату' }),
+          h('input', {
+            type: 'date', value: prices.asOf || DEFAULT_PRICES.asOf,
+            onchange: (event) => saveSettings({
+              prices: { ...prices, ...DEFAULT_PRICES, asOf: event.target.value },
+            }),
+          }))),
+      h('p', { class: 'tiny faint', style: 'margin-top:10px' },
+        'Цены за миллион токенов. Таблица редактируется и подписана датой: тарифы у провайдера '
+        + 'меняются, а суммы в приложении это оценка.'),
+      h('div', { class: 'chips', style: 'margin-top:8px' },
+        h('button', {
+          class: 'btn btn-small btn-ghost', type: 'button', text: 'Вернуть значения по умолчанию',
+          onclick: () => {
+            saveSettings({ prices: null });
+            renderPrices();
+          },
+        })),
+    );
   }
 
   function render() {

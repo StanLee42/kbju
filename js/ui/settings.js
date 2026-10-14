@@ -1,7 +1,8 @@
-// Настройки: провайдер, нормы, типы дней, расписание, исключения на даты, цель и темп, цены.
+// Настройки: провайдер, нормы, типы дней, расписание, исключения на даты, цель и темп.
 //
-// Расход и хранилище отсюда убраны: они открываются из раздела «Ещё». Здесь остаётся то,
-// что влияет на расчёты и на поведение приложения.
+// Расход, хранилище и цены провайдера отсюда убраны: расход и хранилище открываются
+// из раздела «Ещё», а цены живут на экране расхода. Здесь остаётся то, что влияет
+// на расчёты и на поведение приложения.
 import { AVAILABLE_PROVIDERS, createProvider, describeError } from '../llm/index.js';
 import { dayTypeById, kcalFromMacros, macrosForKcal, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
@@ -9,7 +10,6 @@ import { fill, h, num, round, todayISO } from '../util.js';
 import { BUILD_VERSION } from '../version.js';
 import { serverVersion, updateAndReload } from '../update.js';
 import { toast } from './components/sheet.js';
-import { DEFAULT_PRICES } from '../usage.js';
 import { openNormsChat } from './norms-chat.js';
 
 const WEEK_KEYS = [
@@ -30,7 +30,6 @@ const MACRO_FIELDS = [
 export function mount(container) {
   const providerHost = h('div', {});
   const reportHost = h('div', {});
-  const pricesHost = h('div', {});
   const dayTypesHost = h('div', {});
   const weekHost = h('div', {});
   const cycleHost = h('div', {});
@@ -59,9 +58,6 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Цель и темп' }),
       buildGoalHost()),
-    h('section', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'Цены провайдера' }),
-      pricesHost),
     buildVersionLine(),
   );
 
@@ -228,56 +224,6 @@ export function mount(container) {
         'Править нормы руками тоже можно, в разделе «Типы дней и нормы». Если менять калории '
         + 'дня, белки, жиры и углеводы пересчитаются в той же пропорции.'));
   }
-
-  // --- цены провайдера ---
-
-  function renderPrices() {
-    const prices = store.settings.prices || DEFAULT_PRICES;
-    const model = store.settings.provider?.model || 'deepseek-flash';
-    const table = { ...(prices.perModel?.[model] || DEFAULT_PRICES.perModel['deepseek-flash']) };
-
-    const patch = (key, value) => {
-      const next = {
-        ...DEFAULT_PRICES,
-        ...prices,
-        perModel: { ...(prices.perModel || {}), [model]: { ...table, [key]: value } },
-      };
-      saveSettings({ prices: next });
-    };
-
-    const field = (key, label) => h('label', { class: 'field', style: 'margin:0' },
-      h('span', { class: 'field-label', text: label }),
-      h('input', {
-        type: 'number', inputmode: 'decimal', value: table[key],
-        onchange: (event) => patch(key, Number(event.target.value) || 0),
-      }));
-
-    fill(pricesHost, 
-      h('div', { class: 'grid-2' },
-        field('inputCacheMiss', 'Вход, промах'),
-        field('inputCacheHit', 'Вход, кэш')),
-      h('div', { class: 'grid-2', style: 'margin-top:8px' },
-        field('output', 'Выход'),
-        h('label', { class: 'field', style: 'margin:0' },
-          h('span', { class: 'field-label', text: 'Цены на дату' }),
-          h('input', {
-            type: 'date', value: prices.asOf || DEFAULT_PRICES.asOf,
-            onchange: (event) => saveSettings({ prices: { ...prices, ...DEFAULT_PRICES, asOf: event.target.value } }),
-          }))),
-      h('p', { class: 'tiny faint', style: 'margin-top:10px' },
-        'Цены за миллион токенов. Все суммы в приложении это оценка: тарифы у провайдера меняются, '
-        + 'поэтому таблица редактируется и подписана датой.'),
-      h('div', { class: 'chips', style: 'margin-top:8px' },
-        h('button', {
-          class: 'btn btn-small btn-ghost', type: 'button', text: 'Вернуть значения по умолчанию',
-          onclick: () => {
-            saveSettings({ prices: null });
-            renderPrices();
-          },
-        })),
-    );
-  }
-
 
   // --- типы дней ---
 
@@ -663,7 +609,6 @@ export function mount(container) {
   renderDynamic();
   renderProvider();
   renderReport();
-  renderPrices();
 
   return { destroy() {} };
 }
