@@ -246,5 +246,29 @@ if (String(blockers).includes('sheetRoot')) {
   problems.push('невидимая шторка перехватывает касания (sheetRoot в списке перехватчиков)');
 }
 
+// Клавиатура уменьшает видимую часть экрана, а высота окна в единицах vh остаётся прежней.
+// Проверяем, что при этом окно не вылезает верхом за видимую часть: иначе содержимое уезжает
+// за край экрана, и правящаяся ячейка пропадает из виду.
+await evaluate(`(() => { document.getElementById('sheetRoot').style.height = '300px'; return 'ok'; })()`);
+await wait(250);
+const narrowFit = await evaluate(`(() => {
+  const holder = document.getElementById('sheetRoot');
+  const sheet = document.querySelector('.sheet');
+  if (!holder || !sheet) return JSON.stringify({ skipped: true });
+  const holderRect = holder.getBoundingClientRect();
+  const sheetRect = sheet.getBoundingClientRect();
+  return JSON.stringify({
+    перелив: Math.round(holderRect.top - sheetRect.top),
+    высота: Math.round(sheetRect.height),
+    прокрутка: sheet.scrollHeight > sheet.clientHeight,
+  });
+})()`);
+await evaluate(`(() => { document.getElementById('sheetRoot').style.height = ''; return 'ok'; })()`);
+console.log(`окно при узкой видимой части: ${narrowFit}`);
+const narrow = JSON.parse(narrowFit);
+if (narrow.перелив > 2) {
+  problems.push(`окно вылезает верхом за видимую часть на ${narrow.перелив}px: содержимое уезжает за край экрана`);
+}
+
 console.log(problems.length ? `\nНАЙДЕНО ПРОБЛЕМ (${problems.length}):\n${problems.join('\n')}` : '\nвёрстка и касания в порядке');
 ws.close();
