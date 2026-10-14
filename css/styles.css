@@ -418,9 +418,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 .composer-input { min-height: 52px; resize: vertical; }
 .composer-ways { margin-top: 8px; }
-/* Отправка во всю ширину под способами ввода: кнопка-действие одна, и она не спорит
-   размерами с выбором способа. */
-.composer-send { width: 100%; padding: 14px; margin-top: 8px; }
+/* Отправка стоит отдельной строкой под способами ввода и берёт ширину и высоту
+   у основной кнопки приложения: здесь остаётся только отступ от ряда. */
+.composer-send { margin-top: 8px; }
 
 /* ---------- Нижнее меню ---------- */
 
