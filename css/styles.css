@@ -503,7 +503,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   position: relative;
   width: 100%;
   max-width: 560px;
-  max-height: 92vh;
+  /* Высота окна ограничена и видимой частью экрана, а не только высотой окна приложения:
+     клавиатура уменьшает видимую часть, а единицы vh остаются прежними. Из-за этого окно
+     становилось выше видимой части и уезжало верхом за край экрана: так пропадала из виду
+     ячейка веса, которую человек правил. */
+  max-height: min(92vh, 100%);
   overflow-y: auto;
   background: var(--bg-elev);
   border-top-left-radius: 20px;
