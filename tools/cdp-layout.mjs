@@ -12,6 +12,8 @@ const SCREENS = [
   { hash: '#/today', name: 'Сегодня' },
   { hash: '#/usage', name: 'Расход' },
   { hash: '#/settings', name: 'Настройки' },
+  { hash: '#/storage', name: 'Хранилище' },
+  { hash: '#/more', name: 'Ещё' },
 ];
 
 const targets = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
@@ -207,7 +209,7 @@ async function tapCenter(selectorText, label) {
   return `${label}: касание отправлено (${x}, ${y})`;
 }
 
-console.log(`\n${await tapCenter('Настройки', 'вкладка Настройки')}`);
+console.log(`\n${await tapCenter('Ещё', 'вкладка Ещё')}`);
 
 const afterTap = await evaluate(`JSON.stringify({
   hash: location.hash,
@@ -219,8 +221,8 @@ const afterTap = await evaluate(`JSON.stringify({
 console.log(`после нажатия: ${afterTap}`);
 
 const parsed = JSON.parse(afterTap);
-if (parsed.hash !== '#/settings') problems.push('касание по «Настройки» не открыло экран настроек');
-if (!parsed.секций) problems.push('на экране настроек нет ни одной секции');
+if (parsed.hash !== '#/more') problems.push('касание по «Ещё» не открыло раздел «Ещё»');
+if (!parsed.секций) problems.push('в разделе «Ещё» нет ни одной секции');
 
 // Проверяем, что касания доходят до содержимого, а не гасятся невидимым слоем.
 await send('Page.navigate', { url: `${baseUrl}/#/today` });
