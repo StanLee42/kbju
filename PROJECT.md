@@ -41,8 +41,10 @@ KBJU это веб-приложение для учёта еды: дневник
 - Нормы разговором: спор о рычагах. [`js/ui/norms-chat.js`](js/ui/norms-chat.js)
 - Продукты: список, правка, разбор снимка упаковки. [`js/ui/products.js`](js/ui/products.js),
   [`js/ui/product-photo.js`](js/ui/product-photo.js)
-- Расход: токены и деньги, вход из настроек. [`js/ui/usage.js`](js/ui/usage.js)
-- Настройки: провайдер, типы дней, данные. [`js/ui/settings.js`](js/ui/settings.js)
+- Расход: токены и деньги, вход из раздела «Ещё». [`js/ui/usage.js`](js/ui/usage.js)
+- Ещё: настройки, расход, хранилище. [`js/ui/more.js`](js/ui/more.js)
+- Настройки: провайдер, нормы, типы дней, расписание, цель и темп. [`js/ui/settings.js`](js/ui/settings.js)
+- Хранилище: занятое место, постоянное хранилище, удаление данных. [`js/ui/storage.js`](js/ui/storage.js)
 - Карточка разбора: общая для снимка и для разговора. [`js/ui/result-card.js`](js/ui/result-card.js)
 
 ## Данные и ключи
