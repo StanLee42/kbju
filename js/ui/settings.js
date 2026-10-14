@@ -1,11 +1,11 @@
-// Настройки: типы дней, расписание, исключения на даты, цель и темп, хранилище.
-import { isStoragePersistent, requestPersistentStorage, usageEstimate, wipeEverything } from '../db.js';
-import * as db from '../db.js';
-import { clearChat } from '../chat-session.js';
+// Настройки: провайдер, нормы, типы дней, расписание, исключения на даты, цель и темп, цены.
+//
+// Расход и хранилище отсюда убраны: они открываются из раздела «Ещё». Здесь остаётся то,
+// что влияет на расчёты и на поведение приложения.
 import { AVAILABLE_PROVIDERS, createProvider, describeError } from '../llm/index.js';
 import { dayTypeById, kcalFromMacros, macrosForKcal, resolveDayTypeId } from '../norm.js';
 import { saveSettings, store } from '../state.js';
-import { bytesHuman, fill, h, num, round, todayISO } from '../util.js';
+import { fill, h, num, round, todayISO } from '../util.js';
 import { BUILD_VERSION } from '../version.js';
 import { serverVersion, updateAndReload } from '../update.js';
 import { toast } from './components/sheet.js';
@@ -36,7 +36,6 @@ export function mount(container) {
   const cycleHost = h('div', {});
   const scheduleModeRow = h('div', { class: 'chips', style: 'margin-bottom:12px' });
   const exceptionsHost = h('div', {});
-  const storageHost = h('div', { class: 'small muted' });
 
   container.append(
     h('h1', { text: 'Настройки', style: 'margin-bottom:12px' }),
@@ -63,19 +62,6 @@ export function mount(container) {
     h('section', { class: 'card' },
       h('h2', { class: 'card-title', text: 'Цены провайдера' }),
       pricesHost),
-    // Расход живёт отдельным экраном, а вход в него отсюда: в нижней панели вместо расхода
-    // стоит список продуктов.
-    h('section', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'Расход' }),
-      h('p', { class: 'small faint', style: 'margin:0 0 10px' },
-        'Журнал запросов к модели, прогноз на месяц, бюджет и остаток на счету провайдера.'),
-      h('button', {
-        class: 'btn', type: 'button', text: 'Открыть расход',
-        onclick: () => { location.hash = '#/usage'; },
-      })),
-    h('section', { class: 'card' },
-      h('h2', { class: 'card-title', text: 'Хранилище' }),
-      storageHost),
     buildVersionLine(),
   );
 
@@ -640,56 +626,6 @@ export function mount(container) {
     );
   }
 
-  // --- хранилище ---
-
-  async function renderStorage() {
-    const [estimate, persistent] = await Promise.all([usageEstimate(), isStoragePersistent()]);
-    const parts = [];
-
-    if (estimate) {
-      parts.push(h('div', {}, `Занято: ${bytesHuman(estimate.usage)} из ${bytesHuman(estimate.quota)} доступных`));
-    } else {
-      parts.push(h('div', {}, 'Размер хранилища браузер не сообщает'));
-    }
-
-    parts.push(h('div', { style: 'margin-top:6px' },
-      persistent === true
-        ? 'Постоянное хранилище включено: браузер не удалит дневник сам.'
-        : persistent === false
-          ? 'Постоянное хранилище не выдано: браузер может удалить данные при нехватке места.'
-          : 'Статус постоянного хранилища неизвестен.'));
-
-    parts.push(h('div', { class: 'chips', style: 'margin-top:10px' },
-      h('button', {
-        class: 'btn btn-small', type: 'button', text: 'Запросить постоянное хранилище',
-        onclick: async () => {
-          const granted = await requestPersistentStorage();
-          toast(granted ? 'Постоянное хранилище включено' : 'Браузер отказал');
-          renderStorage();
-        },
-      })));
-
-    let armed = false;
-    const wipeButton = h('button', {
-      class: 'btn btn-small btn-danger', type: 'button', text: 'Удалить все данные',
-      onclick: async () => {
-        if (!armed) {
-          armed = true;
-          wipeButton.textContent = 'Нажмите ещё раз, чтобы стереть';
-          return;
-        }
-        await wipeEverything();
-        // Разговор о еде лежит вне дневника, но это тоже данные человека.
-        clearChat();
-        toast('Данные удалены');
-        location.reload();
-      },
-    });
-    parts.push(h('div', { class: 'chips', style: 'margin-top:10px' }, wipeButton));
-
-    fill(storageHost, ...parts);
-  }
-
   // --- цель и темп ---
 
   function buildGoalHost() {
@@ -728,7 +664,6 @@ export function mount(container) {
   renderProvider();
   renderReport();
   renderPrices();
-  renderStorage();
 
   return { destroy() {} };
 }

@@ -56,16 +56,6 @@ export function openChatSheet({ date = null } = {}) {
     sheet = openSheet({
       title: 'Добавить еду',
       content: host,
-      actions: [h('button', {
-        class: 'btn btn-small', type: 'button', text: 'Из моих продуктов',
-        onclick: () => openProductsSheet({
-          date: targetDate,
-          // Добавить продукт к разбору можно, когда разбор есть: без него добавлять
-          // не к чему, и остаётся запись в дневник по весу.
-          onPick: state.current?.items?.length || state.draft?.items?.length
-            ? addItemToDraft : null,
-        }),
-      })],
       // Закрытие окна заканчивает разговор, каким бы способом его ни закрыли: кнопкой «В дневник»,
       // касанием мимо окна, клавишей Escape, системной кнопкой «назад» или переходом в другое окно.
       // Следующее открытие окна начинается с чистого листа.
@@ -101,6 +91,15 @@ export function openChatSheet({ date = null } = {}) {
     note: 'Разговор можно вести сколько нужно: блюдо попадает в дневник только по кнопке '
       + '«В дневник». Если закрыть окно без неё, в дневнике ничего не появится, '
       + 'а разговор начнётся заново.',
+    // Список продуктов стоит третьим способом ввода рядом со снимком и галереей: это выбор
+    // того, откуда взять еду, а не отдельное действие окна.
+    onProducts: () => openProductsSheet({
+      date: targetDate,
+      // Добавить продукт к разбору можно, когда разбор есть: без него добавлять
+      // не к чему, и остаётся запись в дневник по весу.
+      onPick: state.current?.items?.length || state.draft?.items?.length
+        ? addItemToDraft : null,
+    }),
     onSend: async ({ text, photo }) => {
       const before = history();
       state.messages.push({

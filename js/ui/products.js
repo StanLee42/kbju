@@ -1,6 +1,9 @@
 // Шторка сохранённых продуктов: список с КБЖУ на 100 г, поиск и порядок,
 // добавление, правка и удаление. Список ничего не считает у модели и токенов
 // не тратит: запись в дневник по весу приходит сюда готовым обработчиком.
+//
+// Кнопок в строках нет: касание строки открывает карточку продукта, и в ней человек
+// вводит вес, записывает продукт в дневник и при надобности правит или удаляет его.
 import { fill, h, nowTime, num, round } from '../util.js';
 import {
   ORDERS, forWeight, itemFromProduct, listProducts, matchByName, nameProblem, orderProducts,
@@ -12,7 +15,7 @@ import { openProductPhoto } from './product-photo.js';
 
 const VALUE_KEYS = ['kcal', 'protein', 'fat', 'carbs'];
 
-export async function openProductsSheet({ title = 'Мои продукты', date = null, onPick = null } = {}) {
+export async function openProductsSheet({ title = 'Продукты', date = null, onPick = null } = {}) {
   const targetDate = date || store.date;
   let products = await listProducts();
   let query = '';
@@ -42,14 +45,10 @@ export async function openProductsSheet({ title = 'Мои продукты', dat
       fill(rows, items.map((product) => h('div', { class: 'product-row' },
         h('button', {
           class: 'product-main', type: 'button',
-          onclick: () => showWeightForm(product),
+          onclick: () => showCard(product),
         },
         h('span', { class: 'product-name', text: product.name }),
-        h('span', { class: 'product-values', text: per100Line(product.per100) })),
-        h('button', {
-          class: 'btn btn-small btn-ghost', type: 'button', text: 'Изменить',
-          onclick: () => showForm(product),
-        }))));
+        h('span', { class: 'product-values', text: per100Line(product.per100) })))));
     }
 
     searchInput.addEventListener('input', () => {
@@ -166,10 +165,6 @@ export async function openProductsSheet({ title = 'Мои продукты', dat
 
     const actions = [
       saveButton,
-      h('button', {
-        class: 'btn btn-small btn-ghost', type: 'button', text: 'Назад',
-        onclick: () => showList(),
-      }),
     ];
 
     if (isEdit) {
@@ -211,8 +206,11 @@ export async function openProductsSheet({ title = 'Мои продукты', dat
     });
   }
 
-  /** Запись выбранного продукта: вес обязателен, числа считаются по весу. */
-  function showWeightForm(product) {
+  /**
+   * Карточка продукта: человек попал в неё касанием строки.
+   * Здесь вес обязателен для записи, числа считаются по весу, а рядом живёт вход в правку.
+   */
+  function showCard(product) {
     const gramsInput = h('input', {
       type: 'number', inputmode: 'decimal', placeholder: 'например 150',
     });
@@ -264,9 +262,10 @@ export async function openProductsSheet({ title = 'Мои продукты', dat
       }));
     }
 
+    // Правка продукта открывается отсюда: в списке кнопок нет, строка ведёт в карточку.
     actions.push(h('button', {
-      class: 'btn btn-small btn-ghost', type: 'button', text: 'Назад',
-      onclick: () => showList(),
+      class: 'btn btn-small btn-ghost', type: 'button', text: 'Изменить продукт',
+      onclick: () => showForm(product),
     }));
 
     updatePreview();

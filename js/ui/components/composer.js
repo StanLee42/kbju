@@ -17,6 +17,7 @@ export function createComposer({
   onSend,
   onTyped = null,
   onAttachError = null,
+  onProducts = null,
 } = {}) {
   const state = { text: initialText, photo: null, preview: null, busy: false, hasDraft: false };
 
@@ -75,22 +76,30 @@ export function createComposer({
     fill(host,
       renderPhoto(),
       input,
-      h('div', { class: 'composer-row' },
-        h('div', { class: 'chips' },
-          h('button', {
-            class: 'btn btn-small', type: 'button', text: '📷 Снять',
-            disabled: state.busy, onclick: () => attach(true),
-          }),
-          h('button', {
-            class: 'btn btn-small', type: 'button', text: '🖼 Из галереи',
-            disabled: state.busy, onclick: () => attach(false),
-          })),
+      // Способы ввода стоят одним рядом, отправка отдельной кнопкой под ними: так отправка
+      // не спорит размерами со способами, и человек видит, что снимок и список это выбор,
+      // а отправка это действие.
+      h('div', { class: 'chips composer-ways' },
         h('button', {
-          class: 'btn-primary composer-send', type: 'button',
-          text: state.busy ? 'Считаю…' : 'Отправить',
-          disabled: state.busy,
-          onclick: send,
-        })),
+          class: 'btn btn-small', type: 'button', text: '📷 Камера',
+          disabled: state.busy, onclick: () => attach(true),
+        }),
+        h('button', {
+          class: 'btn btn-small', type: 'button', text: '🖼 Галерея',
+          disabled: state.busy, onclick: () => attach(false),
+        }),
+        onProducts
+          ? h('button', {
+            class: 'btn btn-small', type: 'button', text: '🧺 Мои продукты',
+            disabled: state.busy, onclick: onProducts,
+          })
+          : null),
+      h('button', {
+        class: 'btn-primary composer-send', type: 'button',
+        text: state.busy ? 'Считаю…' : 'Отправить',
+        disabled: state.busy,
+        onclick: send,
+      }),
       keyWarning
         ? h('p', { class: 'small', style: 'margin-top:8px;color:var(--over)' }, keyWarning)
         : null,

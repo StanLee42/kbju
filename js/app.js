@@ -8,7 +8,9 @@ import { alignWithServer } from './update.js';
 import { openChatSheet } from './ui/chat.js';
 import { openProductsSheet } from './ui/products.js';
 import * as calendar from './ui/calendar.js';
+import * as more from './ui/more.js';
 import * as settings from './ui/settings.js';
+import * as storage from './ui/storage.js';
 import * as today from './ui/today.js';
 import * as usage from './ui/usage.js';
 
@@ -17,6 +19,20 @@ const ROUTES = {
   '/today': today,
   '/usage': usage,
   '/settings': settings,
+  '/storage': storage,
+  '/more': more,
+};
+
+// Какие экраны подсвечивают какую вкладку. Настройки, расход и хранилище открываются
+// из раздела «Ещё», поэтому подсвечивают его: иначе на этих экранах не было бы видно,
+// где человек находится.
+const TAB_OF = {
+  '/calendar': 'calendar',
+  '/today': 'today',
+  '/more': 'more',
+  '/settings': 'more',
+  '/usage': 'more',
+  '/storage': 'more',
 };
 
 let active = null;
@@ -33,7 +49,7 @@ function render() {
   view.replaceChildren();
   active = ROUTES[path].mount(view) || {};
   document.querySelectorAll('.tab[data-tab]').forEach((tab) => {
-    if (tab.dataset.tab === path.slice(1)) tab.setAttribute('aria-current', 'page');
+    if (tab.dataset.tab === TAB_OF[path]) tab.setAttribute('aria-current', 'page');
     else tab.removeAttribute('aria-current');
   });
   window.scrollTo({ top: 0 });
